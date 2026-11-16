@@ -1,0 +1,6 @@
+native/bin/
+native/deps/
+native/packages/
+node_modules/
+work-*
+*.user
