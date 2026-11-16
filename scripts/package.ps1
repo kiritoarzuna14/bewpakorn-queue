@@ -17,7 +17,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install.ps
 pause
 '@ | Set-Content -LiteralPath (Join-Path $release 'INSTALL.cmd') -Encoding ASCII
 Push-Location $root
-try{& git archive --format=zip --output=(Join-Path $release 'source.zip') HEAD;if($LASTEXITCODE -ne 0){throw 'Source archive failed'}}finally{Pop-Location}
+try{$sourceArchive=Join-Path $release 'source.zip';& git archive --format=zip "--output=$sourceArchive" HEAD;if($LASTEXITCODE -ne 0){throw 'Source archive failed'}}finally{Pop-Location}
 $sums=Get-ChildItem -LiteralPath $release -File -Recurse | Where-Object {$_.Name -ne 'SHA256SUMS.txt'} | Sort-Object FullName | ForEach-Object {((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())+'  '+$_.FullName.Substring($release.Length+1).Replace('\','/')}
 $sums | Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS.txt') -Encoding ASCII
 $zipPath=Join-Path $out 'BewpakornQueue-1.0.0.zip'

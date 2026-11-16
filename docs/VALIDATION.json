@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "date": "2026-11-16",
+  "timezone": "Asia/Bangkok",
+  "sourceCodeCommit": "6eea5e5",
+  "nodeTests": {"passed": 20, "failed": 0},
+  "browserTests": {"panelWidth320": "passed", "groupedOptionsWidth320": "passed"},
+  "nativeBuild": "passed",
+  "nativeSelfTests": "passed: identity, ACK, persistence, protected operator roles, cancel before import, in-flight settlement, ambiguous late commit, receiver exit, replay, corruption, detached and concurrent snapshots",
+  "nativeFramedProtocol": "passed",
+  "livePublicLoginSurface": {"code": "LOGIN_FORM_READY", "customerLoginAttempted": false},
+  "installedHost": {"protocolVersion": 1, "webViewAvailable": true, "ramImportSupported": true, "customerGrouping": false, "accountCount": 92, "currentJobExists": false, "handledCount": 0, "ramDatabaseHashUnchanged": true},
+  "catalog": {"orderVariants": 146, "cameraman": 29, "mm2": 43, "skibidi": 74, "giftVariantsExcluded": true},
+  "review": "No remaining Important/Critical findings in the final focused native review. Shop malformed-row finding fixed with regression test; extension reconnect/notification findings fixed.",
+  "liveCustomerFlowTested": false,
+  "remainingSetup": ["Load the unpacked extension in Chrome", "Select and save one operator account per enabled map"],
+  "limitations": ["RAM v30 new accounts stay Default; existing alias/description/group preserved", "Roblox challenge indicators are conservative; human verification is required", "A live customer import has not been executed as a development test", "Only one known RAM instance may run for import", "Completion after ambiguous import may wait for durable evidence or original receiver exit"]
+}
