@@ -1,3 +1,11 @@
+// A job-level code that repeats a role code describes the same blocker.
+export function blockerRoles(job) {
+  if (!job) return [];
+  const roles = [['customer', job.customer], ['operator', job.operator]];
+  if (!job.code || !roles.some(([, role]) => role?.code === job.code)) roles.push(['job', job]);
+  return roles.filter(([, role]) => role && (role.state === 'blocked' || role.code));
+}
+
 // Serialize read/modify/write so simultaneous blockers cannot erase each other.
 export function createNotifier(chromeApi) {
   let chain = Promise.resolve();

@@ -1,5 +1,5 @@
 export class NativeClient {
-  constructor(chromeApi, onSnapshot, onDisconnect, timeoutMs = 15000) {
+  constructor(chromeApi, onSnapshot, onDisconnect, timeoutMs = 30000) {
     this.chrome = chromeApi; this.onSnapshot = onSnapshot; this.onDisconnect = onDisconnect;
     this.timeoutMs = timeoutMs; this.pending = new Map(); this.port = null; this.serial = 0;
   }

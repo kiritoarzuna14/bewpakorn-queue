@@ -1,7 +1,7 @@
 import {NativeClient} from './native.js';
 import {scanOrders, openAndReadOrder, defaultCatalog, discoverCatalog} from './shop.js';
 import {selectPending, validateCatalog} from './queue.js';
-import {createNotifier} from './notifications.js';
+import {createNotifier, blockerRoles} from './notifications.js';
 
 const state = {connection: 'disconnected', phase: 'idle', native: null, queue: [], configured: false};
 let busy = false;
@@ -17,8 +17,7 @@ function snapshot(value) {
   if (value.current) state.phase = value.current.state === 'blocked' ? 'blocked' : 'working';
   else if (state.phase !== 'scanning') state.phase = 'idle';
   const job = value.current;
-  for (const [role, data] of [['customer', job?.customer], ['operator', job?.operator], ['job', job]]) {
-    if (data?.state !== 'blocked' && !data?.code) continue;
+  for (const [role, data] of blockerRoles(job)) {
     const code = allowedCode(data.code || 'UNKNOWN_ERROR'); const key = `${job.jobId}:${role}:${code}`;
     notifyOnce(key, job, role, code).catch(() => {});
   }
