@@ -1,0 +1,7 @@
+# Task 2 — Extension worker and UI
+
+Implemented MV3 native client, service worker, Thai side panel, and explicit catalog/account setup. The public key is the repository identity; permissions are limited to the fixed shop origin and requested Chrome APIs. Native snapshots own job state. Startup reconciles only; the toolbar starts an idle round. Completion persists a token-bound intent before sending, replays on reconnect, and clears it only on ACK. Both UI and worker guard duplicate actions; the UI waits before arming a new job. Customer credentials flow only from the connector to the native request in transient memory. Blocker notifications contain metadata and are deduplicated through local metadata.
+
+Tests use synthetic data. `node --test tests/extension/*.test.mjs` covers request correlation, timeout, disconnect, startup behavior, stale identities, durable completion and simultaneous clicks. `node tests/extension/panel-browser.cjs` with bundled Playwright in `NODE_PATH` checks the blocked state at 320px, both role labels, completion availability and horizontal overflow. No live shop or customer was used.
+
+Integration depends on the root-owned shop and queue modules and native host implementation. An end-to-end run against the actual installed host and an explicitly approved test account remains necessary before operational use. The connector's catalog discovery and page coverage are separately owned and must fail closed if source structure is unknown.
