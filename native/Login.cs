@@ -30,13 +30,14 @@ internal static partial class Host {
  static Dictionary<string,object> Prepare(Dictionary<string,object> p){
   var job=D(ledger["current"]);Require(job!=null && S(job,"jobId")==S(p,"jobId") && S(job,"generation")==S(p,"generation"),"STALE_JOB");
   var role=D(job["customer"]);string username=S(p,"username"),password=S(p,"password");Require(username.Length>0 && username.Length<=128 && password.Length>0 && password.Length<=1024,"INVALID_REQUEST");Require(String.IsNullOrEmpty(S(role,"username")) || S(role,"username")==username,"CUSTOMER_ID_MISMATCH");Require(S(role,"state")=="waiting","CUSTOMER_ALREADY_PREPARED");Require(WebViewAvailable(),"WEBVIEW_UNAVAILABLE");
-  role["username"]=username;role["state"]="preparing";UpdateJobState(job);Bump();Save();
+  role["username"]=username;role["state"]="preparing";role["canResume"]=false;UpdateJobState(job);Bump();Save();
   string jobId=S(job,"jobId"),gen=S(job,"generation");var thread=new Thread(()=>RunLogin(jobId,gen,username,password));thread.SetApartmentState(ApartmentState.STA);thread.IsBackground=true;thread.Start();return Snapshot();
  }
  static void UpdateJobState(Dictionary<string,object> job){var customer=D(job["customer"]);var op=D(job["operator"]);if(S(op,"state")=="blocked"){job["state"]="blocked";job["code"]=S(op,"code");}else if(S(customer,"state")=="blocked"){job["state"]="blocked";job["code"]=S(customer,"code");}else if(S(op,"state")=="ready" && S(customer,"state")=="ready"){job["state"]="ready";job.Remove("code");}else{job["state"]="preparing";job.Remove("code");}}
  static bool Current(string jobId,string gen){var j=D(ledger["current"]);return j!=null && S(j,"jobId")==jobId && S(j,"generation")==gen && S(D(j["customer"]),"state")!="ready";}
  static void CloseLogin(){var f=loginForm;if(f!=null && !f.IsDisposed && f.IsHandleCreated)try{f.BeginInvoke(new Action(()=>f.Close()));}catch{}}
- static void Block(string jobId,string gen,string code){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"state")=="blocked" && S(role,"code")==code)return;role["state"]="blocked";role["code"]=code;UpdateJobState(job);Bump();Save();}}
+ static void Block(string jobId,string gen,string code){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"state")=="blocked" && S(role,"code")==code)return;role["state"]="blocked";role["code"]=code;if(code=="LOGIN_FORM_TIMEOUT" && S(role,"submissionAttempted")!="True" && !job.ContainsKey("importIntent"))role["canResume"]=true;UpdateJobState(job);Bump();Save();}}
+ static bool MarkSubmission(string jobId,string gen,bool attempted){lock(Gate){if(!Current(jobId,gen))return false;var role=D(D(ledger["current"])["customer"]);role["submissionAttempted"]=attempted;role["canResume"]=false;Bump();Save();return true;}}
  static void RunLogin(string jobId,string gen,string username,string password){
   string profile=Path.Combine(profilesRoot,NewId());Form owned=null;try{
    using(var f=new Form())using(var browser=new WebView2()){
@@ -46,7 +47,7 @@ internal static partial class Host {
      lock(Gate){if(!Current(jobId,gen)){f.Close();return;}} var env=await CoreWebView2Environment.CreateAsync(null,profile);await browser.EnsureCoreWebView2Async(env);var core=browser.CoreWebView2;core.Settings.IsPasswordAutosaveEnabled=false;core.Settings.IsGeneralAutofillEnabled=false;core.Settings.AreDevToolsEnabled=false;
      core.NewWindowRequested+=(s,e)=>{e.Handled=true;};
      core.NavigationStarting+=(s,e)=>{Uri u;if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out u) || u.Scheme!="https" || !(u.Host.Equals("roblox.com",StringComparison.OrdinalIgnoreCase)||u.Host.EndsWith(".roblox.com",StringComparison.OrdinalIgnoreCase)))e.Cancel=true;};
-     bool submitted=false,busy=false,pageLoaded=false,checking=false,expired=false,loginTimedOut=false;string lastCookie=null;DateTime deadline=DateTime.UtcNow.AddSeconds(30),loginDeadline=DateTime.MaxValue;
+     bool filled=false,submitted=false,busy=false,pageLoaded=false,checking=false,expired=false,loginTimedOut=false;string lastCookie=null;DateTime deadline=DateTime.UtcNow.AddSeconds(30),submitDeadline=DateTime.MaxValue,loginDeadline=DateTime.MaxValue;
      Func<Task> check=async ()=>{if(checking)return;checking=true;try{
       lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}
       var cookies=await core.CookieManager.GetCookiesAsync("https://www.roblox.com/");var auth=cookies.FirstOrDefault(c=>c.Name==".ROBLOSECURITY" && !String.IsNullOrEmpty(c.Value));
@@ -56,11 +57,23 @@ internal static partial class Host {
       string code=J.Deserialize<string>(issue);if(!String.IsNullOrEmpty(code)){Block(jobId,gen,code);}
       if(submitted && !loginTimedOut && DateTime.UtcNow>=loginDeadline){loginTimedOut=true;Block(jobId,gen,"CUSTOMER_LOGIN_TIMEOUT");}
       Uri source;if(!submitted && !expired && String.IsNullOrEmpty(code) && Uri.TryCreate(core.Source,UriKind.Absolute,out source) && source.Host.Equals("www.roblox.com",StringComparison.OrdinalIgnoreCase) && source.AbsolutePath.StartsWith("/login",StringComparison.OrdinalIgnoreCase)){
-       if(DateTime.UtcNow>=deadline){expired=true;password=null;Block(jobId,gen,"LOGIN_FORM_TIMEOUT");}
-       else{string ready=await core.ExecuteScriptAsync("!!(document.querySelector('#login-username')&&document.querySelector('#login-password')&&document.querySelector('#login-button:not(:disabled)'))");if(ready=="true"){
+       if(!filled){
+        if(DateTime.UtcNow>=deadline){expired=true;password=null;Block(jobId,gen,"LOGIN_FORM_TIMEOUT");}
+        else if(await core.ExecuteScriptAsync(LoginFormScripts.Ready)=="true"){
+         lock(Gate){if(!Current(jobId,gen))return;}
+         filled=true;submitDeadline=DateTime.UtcNow.AddSeconds(30);string script=LoginFormScripts.Fill(J.Serialize(username),J.Serialize(password));password=null;var result=await core.ExecuteScriptAsync(script);script=null;
+         if(result!="true"){expired=true;Block(jobId,gen,"LOGIN_FORM_CHANGED");}
+        }
+       }else if(DateTime.UtcNow>=submitDeadline){expired=true;Block(jobId,gen,"LOGIN_SUBMIT_TIMEOUT");}
+       else{
         lock(Gate){if(!Current(jobId,gen))return;}
-        submitted=true;loginDeadline=DateTime.UtcNow.AddSeconds(90);string script="(()=>{const u=document.querySelector('#login-username'),p=document.querySelector('#login-password'),b=document.querySelector('#login-button');if(!u||!p||!b)return false;const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(u,"+J.Serialize(username)+");u.dispatchEvent(new Event('input',{bubbles:true}));set.call(p,"+J.Serialize(password)+");p.dispatchEvent(new Event('input',{bubbles:true}));b.click();return true;})()";password=null;var result=await core.ExecuteScriptAsync(script);script=null;if(result!="true")Block(jobId,gen,"LOGIN_FORM_CHANGED");
-       }}
+        // Mark before dispatch: an unknown script outcome must never retry a
+        // click. PENDING/CHALLENGE explicitly prove no click was attempted.
+        if(!MarkSubmission(jobId,gen,true))return;submitted=true;var result=await core.ExecuteScriptAsync(LoginFormScripts.Submit);
+        if(result=="\"PENDING\""||result=="\"CHALLENGE\""){submitted=false;MarkSubmission(jobId,gen,false);}
+        else if(result=="\"CLICKED\"")loginDeadline=DateTime.UtcNow.AddSeconds(90);
+        else{expired=true;Block(jobId,gen,"LOGIN_FORM_CHANGED");}
+       }
       }
      }catch{Block(jobId,gen,"CUSTOMER_LOGIN_UNAVAILABLE");}finally{checking=false;}};
      core.NavigationCompleted+=async (s,e)=>{if(e.IsSuccess){pageLoaded=true;await check();}};var timer=new System.Windows.Forms.Timer();timer.Interval=2000;timer.Tick+=async (s,e)=>await check();f.FormClosed+=(s,e)=>timer.Dispose();timer.Start();core.Navigate("https://www.roblox.com/login");

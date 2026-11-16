@@ -17,7 +17,7 @@ function render(s) {
   if (j) { const strong=document.createElement('strong'); strong.textContent=j.order.mapName || 'แมพ'; details.append(strong,document.createElement('br'),document.createTextNode(`${j.order.productName || 'สินค้า'} · จำนวน ${j.order.quantity ?? 'ดูในออเดอร์'}`),document.createElement('br'),document.createTextNode(displayDate(j.order.createdAt))); }
   else details.textContent=s.phase==='empty'?'คิวครบแล้ว':s.phase==='scanning'?'กำลังอ่านคิว':s.configured?'กดไอคอนส่วนขยายเพื่อเริ่มรอบงาน':'เริ่มจากตั้งค่าและจับคู่บัญชี';
   for (const role of ['customer','operator']) { const r=j?.[role]; $(`${role}-name`).textContent=r?.username || (role==='customer'?j?.order.customerUsername:'') || '—'; $(`${role}-state`).textContent=labels[r?.state] || 'รอออเดอร์'; }
-  const code=s.issue || j?.code || j?.customer?.code || j?.operator?.code; $('issue').hidden=!code; $('issue').textContent=code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : '';
+  const code=s.issue || j?.code || j?.customer?.code || j?.operator?.code; $('issue').hidden=!code; $('issue').textContent=j?.customer?.canResume?'ออเดอร์เดิมยังอยู่ กดไอคอนส่วนขยายเพื่อเตรียมงานนี้ต่อได้':code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : '';
   $('complete').disabled=!j || locked || s.completionPending || s.connection!=='connected' || Date.now()<armedAt;
   $('queue-count').textContent=s.queue?.length ? `รออีก ${s.queue.length}` : '';
   $('queue-list').replaceChildren(...(s.queue || []).slice(0,5).map(o=>{const li=document.createElement('li');li.textContent=`${o.mapName || 'แมพ'} · ${o.productName || 'สินค้า'}`;return li;}));

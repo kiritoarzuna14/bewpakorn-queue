@@ -1,5 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process'),assert=require('node:assert/strict');
-const folder=path.join(process.env.LOCALAPPDATA,'BewpakornQueue','app');
+const appRoot=path.join(process.env.LOCALAPPDATA,'BewpakornQueue','app');
+const manifest=JSON.parse(fs.readFileSync(path.join(appRoot,'com.bewpakorn.queue.json'),'utf8').replace(/^\uFEFF/,''));
+const folder=path.dirname(manifest.path);
 const config=JSON.parse(fs.readFileSync(path.join(folder,'config.json'),'utf8').replace(/^\uFEFF/,''));
 const child=spawn(path.join(folder,'BewpakornQueueHost.exe'),[config.extensionOrigin],{windowsHide:true,stdio:['pipe','pipe','ignore']});
 let buffer=Buffer.alloc(0),serial=0;const pending=new Map();

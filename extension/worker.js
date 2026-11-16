@@ -67,9 +67,12 @@ async function next() {
   const job = state.native?.current;
   if (!job || job.order.orderId !== order.orderId) throw new Error('CLAIM_MISMATCH');
   state.queue = pending.slice(1); broadcast();
+  await prepareCurrent(job);
+}
+async function prepareCurrent(job) {
   try {
     if (!ownsJob(job)) return;
-    const credentials = await openAndReadOrder(order);
+    const credentials = await openAndReadOrder(job.order);
     // Success may arrive while the detail request is pending. Its old result
     // must not submit credentials or replace the next job's visible problem.
     if (!ownsJob(job)) return;
@@ -81,7 +84,7 @@ async function next() {
 async function start() {
   if (busy || starting) throw new Error('BUSY');
   starting = true;
-  try { await sync(); if (!state.native?.current) await next(); }
+  try { await sync();const job=state.native?.current;if(!job)await next();else if(job.customer?.canResume){const resumed=await native.request('RESUME_UNSUBMITTED',{jobId:job.jobId,generation:job.generation});snapshot(resumed);if(state.native?.current)await prepareCurrent(state.native.current);} }
   finally { starting = false; }
 }
 async function complete(identity) {
@@ -120,7 +123,9 @@ async function handle(message) {
         if (mappings.has(item.mapId) && mappings.get(item.mapId) !== item.operatorUserId) throw new Error('INVALID_CATALOG');
         mappings.set(item.mapId, item.operatorUserId);
       }
-      await chrome.storage.local.set({config:message.payload}); await config(); broadcast(); return state;
+      await chrome.storage.local.set({config:message.payload}); await config();
+      const enabledProducts=new Set(message.payload.catalog.map(p=>p.productId));state.queue=state.queue.filter(o=>enabledProducts.has(o.productId));
+      broadcast(); return state;
     }
     default: throw new Error('UNKNOWN_COMMAND');
   }

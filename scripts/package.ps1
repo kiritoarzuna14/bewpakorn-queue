@@ -1,9 +1,11 @@
 param([string]$OutputDirectory=(Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) '..\outputs'),[switch]$SkipBuild)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
+$version=(Get-Content -LiteralPath (Join-Path $root 'extension\manifest.json') -Raw | ConvertFrom-Json).version
+if($version -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}$'){throw 'Invalid release version'}
 if(!$SkipBuild){& (Join-Path $PSScriptRoot 'build-native.ps1')}
 $out=[IO.Path]::GetFullPath($OutputDirectory)
-$release=Join-Path $out 'BewpakornQueue-1.0.0'
+$release=Join-Path $out "BewpakornQueue-$version"
 New-Item -ItemType Directory -Force $out,$release,(Join-Path $release 'extension'),(Join-Path $release 'native\bin'),(Join-Path $release 'scripts'),(Join-Path $release 'docs') | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $release 'extension') -Force}
 Get-ChildItem -LiteralPath (Join-Path $root 'native\bin') -File | Where-Object {$_.Name -ne 'config.json' -and $_.Name -ne '.gitignore'} | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $release 'native\bin') -Force}
@@ -20,6 +22,6 @@ Push-Location $root
 try{$sourceArchive=Join-Path $release 'source.zip';& git archive --format=zip "--output=$sourceArchive" HEAD;if($LASTEXITCODE -ne 0){throw 'Source archive failed'}}finally{Pop-Location}
 $sums=Get-ChildItem -LiteralPath $release -File -Recurse | Where-Object {$_.Name -ne 'SHA256SUMS.txt'} | Sort-Object FullName | ForEach-Object {((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())+'  '+$_.FullName.Substring($release.Length+1).Replace('\','/')}
 $sums | Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS.txt') -Encoding ASCII
-$zipPath=Join-Path $out 'BewpakornQueue-1.0.0.zip'
+$zipPath=Join-Path $out "BewpakornQueue-$version.zip"
 Compress-Archive -LiteralPath $release -DestinationPath $zipPath -Force
 Write-Output $zipPath

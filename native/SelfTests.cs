@@ -3,6 +3,16 @@ using System.IO;
 using System.Threading;
 using System.Collections.Generic;
 internal static partial class Host {
+ static void ResumeSelfTests(){
+  var folder=Path.Combine(Path.GetTempPath(),"bewqueue-resume-"+NewId());Directory.CreateDirectory(folder);var oldPath=ledgerPath;var oldLedger=ledger;
+  try{ledgerPath=Path.Combine(folder,"ledger.json");ledger=Obj("revision",0,"current",null,"handled",new object[0],"commands",new Dictionary<string,object>());
+   var job=TestJob("resume");D(job["order"])["operatorUserId"]="";string jobId=S(job,"jobId"),token=S(job,"completionToken");Block(jobId,"1","LOGIN_FORM_TIMEOUT");LoadLedger();job=D(ledger["current"]);Require(S(D(job["customer"]),"canResume")=="True","TEST");
+   ResumeUnsubmitted(Obj("jobId",jobId,"generation",1));job=D(ledger["current"]);Require(S(job,"jobId")==jobId && S(job,"generation")=="2" && S(job,"completionToken")!=token && S(D(job["order"]),"orderId")=="resume" && S(D(job["customer"]),"state")=="waiting" && A(ledger["handled"]).Length==0,"TEST");
+   try{ResumeUnsubmitted(Obj("jobId",jobId,"generation",2));throw new Exception();}catch(HostError e){Require(e.Code=="RESUME_NOT_ALLOWED","TEST");}
+   D(job["customer"])["canResume"]=true;D(job["customer"])["submissionAttempted"]=true;try{ResumeUnsubmitted(Obj("jobId",jobId,"generation",2));throw new Exception();}catch(HostError e){Require(e.Code=="RESUME_NOT_ALLOWED","TEST");}
+   D(job["customer"])["submissionAttempted"]=false;job["importIntent"]=Obj("userId","123");try{ResumeUnsubmitted(Obj("jobId",jobId,"generation",2));throw new Exception();}catch(HostError e){Require(e.Code=="RESUME_NOT_ALLOWED","TEST");}
+  }finally{ledgerPath=oldPath;ledger=oldLedger;var absolute=Path.GetFullPath(folder);var temp=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;Require(absolute.StartsWith(temp,StringComparison.OrdinalIgnoreCase) && Path.GetFileName(absolute).StartsWith("bewqueue-resume-"),"TEST_PATH");Directory.Delete(absolute,true);}
+ }
  static Dictionary<string,object> TestJob(string orderId){var order=Obj("shopId","bewpakorn.rdcw.xyz","orderId",orderId,"productId","p","productName","P","mapId","m","mapName","M","placeId","1","operatorUserId","999","createdAt","2026-01-01T00:00:00Z","customerUsername","Customer");var job=Obj("jobId",NewId(),"generation",1,"completionToken",NewId(),"order",order,"protectedOperatorUserIds",new object[]{"999"},"state","preparing","customer",Obj("username","Customer","state","preparing"),"operator",Obj("userId","999","state","ready"));ledger["current"]=job;return job;}
  static Dictionary<string,object> TestComplete(Dictionary<string,object> job){return Obj("commandId",NewId(),"jobId",job["jobId"],"orderId",D(job["order"])["orderId"],"generation",job["generation"],"completionToken",job["completionToken"]);}
  static void LoginSelfTests(){
