@@ -2,7 +2,7 @@
   "version": "1.0.1",
   "date": "2026-11-16",
   "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "pending release commit",
+  "sourceCodeCommit": "0bf8851eb4d3c8935b36db69660f00036ceeb3bc",
   "nodeTests": {
     "passed": 25,
     "failed": 0
