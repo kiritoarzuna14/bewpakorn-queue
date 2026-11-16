@@ -1,65 +1,71 @@
-{
-  "version": "1.1.0",
-  "date": "2026-11-16",
-  "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "pending release commit",
-  "nodeTests": {
-    "passed": 31,
-    "failed": 0,
-    "includes": "queue FIFO/handled, shop API drift, operator pool migration and rotation, dual-client worker capability, resume fencing, browser option surfaces"
-  },
-  "nativeBuild": "passed (x64 .NET Framework compiler, System.Web and System.Management references)",
-  "nativeSelfTests": "passed: existing identity/ACK/persistence/cancel suite plus operator rotation 1-2-3-1 with resume and duplicate claims, simultaneous pair, same-server requirement, cancellation before second launch, late owned PID discovery, uncertain ownership blocking retry, different-server rejection, operator disconnect and teleport at the pair barrier, no-secret persistence",
-  "livePairTests": [
-    {
-      "mode": "explicit_owned_pair_test",
-      "operators": ["BewFNTH1 (7219078061) as operator", "BewFNTH2 (7219088985) as customer/private-source"],
-      "connected": true,
-      "distinctSimultaneousProcesses": true,
-      "sameLiveServerVerified": true,
-      "serverInstanceId": "f63c5383-5f79-4227-aa2f-5abe453acba7",
-      "observationSeconds": 15,
-      "ownedClientsClosed": true,
-      "remainingNativePlayers": 0
-    },
-    {
-      "mode": "explicit_owned_pair_test",
-      "operators": ["BewFNTH1 (7219078061) as operator", "BewFNTH2 (7219088985) as customer/private-source"],
-      "connected": true,
-      "distinctSimultaneousProcesses": true,
-      "sameLiveServerVerified": true,
-      "observationSeconds": 15,
-      "ownedClientsClosed": true,
-      "remainingNativePlayers": 0
-    }
-  ],
-  "liveDiagnosis": {
-    "earlierFailure": "PRIVATE_TARGET_REDIRECT_REJECTED, then PAIR_CLIENT_EXITED / PAIR_CONNECTION_LOST",
-    "redirectFinding": "Thai locale redirect /th/games/<place> is accepted by the current validator; all three operator accounts resolve the same private access code",
-    "takeoverFinding": "ROBLOX_singletonMutex was absent on this machine, so RAM had not retained multi-client ownership at its last start; Roblox then closed the earlier client ('Received close main window request') when the second started and the private server was re-created with a new instance",
-    "fix": "native host acquires and holds ROBLOX_singletonMutex on a dedicated thread when no owner exists, mirroring RAM's own mechanism; log reading now ignores CrashHandler side logs and continues to the main player log"
-  },
-  "renderedGameplayVerified": false,
-  "installedHost": {
-    "stagedVersion": "1.1.0",
-    "appDirectory": "C:\\Users\\kirit\\AppData\\Local\\BewpakornQueue\\app\\versions\\1.1.0",
-    "activeExtensionPath": "D:\\BewpakornQueue-1.0.0\\extension",
-    "activeExtensionFilesVerified": 15,
-    "activation": "Chrome Reload required",
-    "queueLedgerUnchangedDuringStaging": true
-  },
-  "review": "Dual-client release review: the pair launcher runs both roles, requires distinct PIDs and identical live server GUID, and closes only owned clients. Two consecutive live runs passed. Visual gameplay was not observed.",
-  "liveCustomerFlowTested": false,
-  "remainingSetup": [
-    "Reload Bewpakorn Queue in Chrome",
-    "Select the Cameraman map and add BewFNTH1, BewFNTH2, BewFNTH3 in that order, then save",
-    "Click the toolbar icon to start the queue"
-  ],
-  "limitations": [
-    "No automated proof of rendered gameplay; logs prove join, identity and identical server only",
-    "Live test covered two of the three operator accounts; the third is covered by fixtures",
-    "RAM v30 new accounts stay Default; existing alias/description/group preserved",
-    "Only one known RAM instance may run",
-    "If Roblox enforces single-instance again (no mutex owner and no host running), the second launch blocks the job instead of retrying"
-  ]
+﻿{
+    "version":  "1.1.0",
+    "date":  "2026-11-16",
+    "timezone":  "Asia/Bangkok",
+    "sourceCodeCommit":  "2eb91f0901d51368c99f1f64ed537cab48bc3ec3",
+    "nodeTests":  {
+                      "passed":  31,
+                      "failed":  0,
+                      "includes":  "queue FIFO/handled, shop API drift, operator pool migration and rotation, dual-client worker capability, resume fencing, browser option surfaces"
+                  },
+    "nativeBuild":  "passed (x64 .NET Framework compiler, System.Web and System.Management references)",
+    "nativeSelfTests":  "passed: existing identity/ACK/persistence/cancel suite plus operator rotation 1-2-3-1 with resume and duplicate claims, simultaneous pair, same-server requirement, cancellation before second launch, late owned PID discovery, uncertain ownership blocking retry, different-server rejection, operator disconnect and teleport at the pair barrier, no-secret persistence",
+    "livePairTests":  [
+                          {
+                              "mode":  "explicit_owned_pair_test",
+                              "operators":  [
+                                                "BewFNTH1 (7219078061) as operator",
+                                                "BewFNTH2 (7219088985) as customer/private-source"
+                                            ],
+                              "connected":  true,
+                              "distinctSimultaneousProcesses":  true,
+                              "sameLiveServerVerified":  true,
+                              "serverInstanceId":  "f63c5383-5f79-4227-aa2f-5abe453acba7",
+                              "observationSeconds":  15,
+                              "ownedClientsClosed":  true,
+                              "remainingNativePlayers":  0
+                          },
+                          {
+                              "mode":  "explicit_owned_pair_test",
+                              "operators":  [
+                                                "BewFNTH1 (7219078061) as operator",
+                                                "BewFNTH2 (7219088985) as customer/private-source"
+                                            ],
+                              "connected":  true,
+                              "distinctSimultaneousProcesses":  true,
+                              "sameLiveServerVerified":  true,
+                              "observationSeconds":  15,
+                              "ownedClientsClosed":  true,
+                              "remainingNativePlayers":  0
+                          }
+                      ],
+    "liveDiagnosis":  {
+                          "earlierFailure":  "PRIVATE_TARGET_REDIRECT_REJECTED, then PAIR_CLIENT_EXITED / PAIR_CONNECTION_LOST",
+                          "redirectFinding":  "Thai locale redirect /th/games/\u003cplace\u003e is accepted by the current validator; all three operator accounts resolve the same private access code",
+                          "takeoverFinding":  "ROBLOX_singletonMutex was absent on this machine, so RAM had not retained multi-client ownership at its last start; Roblox then closed the earlier client (\u0027Received close main window request\u0027) when the second started and the private server was re-created with a new instance",
+                          "fix":  "native host acquires and holds ROBLOX_singletonMutex on a dedicated thread when no owner exists, mirroring RAM\u0027s own mechanism; log reading now ignores CrashHandler side logs and continues to the main player log"
+                      },
+    "renderedGameplayVerified":  false,
+    "installedHost":  {
+                          "stagedVersion":  "1.1.0",
+                          "appDirectory":  "C:\\Users\\kirit\\AppData\\Local\\BewpakornQueue\\app\\versions\\1.1.0",
+                          "activeExtensionPath":  "D:\\BewpakornQueue-1.0.0\\extension",
+                          "activeExtensionFilesVerified":  15,
+                          "activation":  "Chrome Reload required",
+                          "queueLedgerUnchangedDuringStaging":  true
+                      },
+    "review":  "Dual-client release review: the pair launcher runs both roles, requires distinct PIDs and identical live server GUID, and closes only owned clients. Two consecutive live runs passed. Visual gameplay was not observed.",
+    "liveCustomerFlowTested":  false,
+    "remainingSetup":  [
+                           "Reload Bewpakorn Queue in Chrome",
+                           "Select the Cameraman map and add BewFNTH1, BewFNTH2, BewFNTH3 in that order, then save",
+                           "Click the toolbar icon to start the queue"
+                       ],
+    "limitations":  [
+                        "No automated proof of rendered gameplay; logs prove join, identity and identical server only",
+                        "Live test covered two of the three operator accounts; the third is covered by fixtures",
+                        "RAM v30 new accounts stay Default; existing alias/description/group preserved",
+                        "Only one known RAM instance may run",
+                        "If Roblox enforces single-instance again (no mutex owner and no host running), the second launch blocks the job instead of retrying"
+                    ]
 }
