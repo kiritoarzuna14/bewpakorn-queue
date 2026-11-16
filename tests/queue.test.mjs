@@ -23,7 +23,7 @@ test('exact time conversion rejects unknown/invalid Thai date',()=>{
 });
 test('catalog bound to exact category, SKU and verified map; unrecognized services excluded',()=>{
  assert.equal(validateCatalog(cfg),true);
- assert.equal(normalizeOrder({...raw('order000001'),variant:{id:'robux0000001'}},cfg.catalog),null);
+ const other=raw('order000001');other.variant.id='robux0000001';assert.equal(normalizeOrder(other,cfg.catalog),null);
  assert.throws(()=>normalizeOrder(raw('order000001',undefined,'othercategory'),cfg.catalog),{code:'PRODUCT_IDENTITY_CHANGED'});
  assert.throws(()=>validateCatalog({...cfg,catalog:[{...p,placeId:'1'}]}),{code:'CONFIG_INVALID'});
  assert.throws(()=>validateCatalog({...cfg,catalog:[p,p]}),{code:'CONFIG_INVALID'});
@@ -48,6 +48,13 @@ test('unknown page coverage, cursor loops, changing exact count fail closed',asy
  await assert.rejects(scanOrders(cfg,async()=>({data:[raw('order000001')],countEstimate:1,countIsExact:true})),{code:'SHOP_API_CHANGED'});
  await assert.rejects(scanOrders(cfg,async()=>({data:[raw('order000001')],nextCursor:'repeat',countEstimate:2,countIsExact:false})),{code:'SCAN_CHANGED'});
  let calls=0;await assert.rejects(scanOrders(cfg,async()=>({data:[raw(`order00000${++calls}`)],nextCursor:calls===1?'next':null,countEstimate:calls===1?2:3,countIsExact:true})),{code:'SCAN_CHANGED'});
+});
+test('API field drift cannot declare a false empty queue',async()=>{
+ const row=raw('order000001');delete row.status;
+ await assert.rejects(scanOrders(cfg,async()=>({data:[row],nextCursor:null,countEstimate:1,countIsExact:true})),{code:'SHOP_API_CHANGED'});
+ assert.throws(()=>normalizeOrder({...raw('order000001'),status:'UNKNOWN'},cfg.catalog),{code:'SHOP_API_CHANGED'});
+ const missing=raw('order000001');delete missing.variant.productGroup.category;
+ assert.throws(()=>normalizeOrder(missing,cfg.catalog),{code:'SHOP_API_CHANGED'});
 });
 test('category discovery follows structured category cursor and excludes GIFT/account products',async()=>{
  let cursorSeen=false;

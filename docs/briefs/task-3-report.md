@@ -13,3 +13,5 @@ Tests: `node --test tests/queue.test.mjs` passed9/9 before final integration. Co
 Review rulings: native v30 receiver lacks group API, so never rewrite live AccountData to manufacture a group; workflow classification records customer association and native accounts stay Default or preserve existing metadata. Capabilities must state this limitation. A pending import that has already reached RAM cannot be undone; completion must wait for bounded settlement before another job is claimed. Cancellation before sending import must prevent it. These two cases require race tests, not a claim that abort can revoke a remotely committed import.
 
 User approval covers building/installing isolated companion and extension; no real customer login was used as a smoke test. Production login selectors and human challenges still require first intentional live use after setup; this cannot be proven by fake fixtures alone.
+
+Fix review: malformed/missing status/variant/category now raises SHOP_API_CHANGED before eligibility filtering. Focused10/10 queue tests passed, including the reproduced false-empty regression.

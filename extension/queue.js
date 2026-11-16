@@ -54,6 +54,7 @@ export function selectPending(orders, handled = []) {
 }
 
 export function normalizeOrder(row, catalog) {
+  if (!row || !validId(row.id) || !['PROCESSING','COMPLETED','FAILED','CANCELLED','REFUNDED'].includes(row.status) || !validId(row.variant?.id) || !validId(row.variant?.productGroup?.category?.id)) throw fault('SHOP_API_CHANGED');
   const p = catalog.find(p => p.productId === row.variant?.id);
   if (!p || row.status !== 'PROCESSING') return null;
   const map = MAPS.find(m => m.mapId === p.mapId);

@@ -82,7 +82,7 @@ export async function scanOrders(config, rpc = request) {
   const cursors = new Set(), ids = new Set(), result = [];
   for (let page = 0; page < 200; page++) {
     const d = await rpc('orders',{cursor,pageSize:50,sorting:[{id:'createdAt',desc:false}],filtering:[],globalFiltering:'',showFinished:false});
-    if (!d || !Array.isArray(d.data) || !Object.hasOwn(d,'nextCursor') || d.data.length > 50) throw fault('SHOP_API_CHANGED');
+    if (!d || !Array.isArray(d.data) || !Object.hasOwn(d,'nextCursor') || d.data.length > 50 || typeof d.countIsExact!=='boolean' || !Number.isInteger(d.countEstimate) || d.countEstimate<0) throw fault('SHOP_API_CHANGED');
     if (page === 0) {firstCount=d.countEstimate;firstExact=d.countIsExact;}
     if (d.countIsExact && firstExact && d.countEstimate !== firstCount) throw fault('SCAN_CHANGED');
     for (const row of d.data) {
