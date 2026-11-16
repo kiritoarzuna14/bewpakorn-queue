@@ -15,18 +15,21 @@ export class NativeClient {
       if (message.ok === true) request.resolve(message.payload);
       else request.reject(new Error(message.error?.code || 'NATIVE_ERROR'));
     });
-    port.onDisconnect.addListener(() => {
-      if (this.port !== port) return;
-      this.port = null;
-      for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('NATIVE_DISCONNECTED')); }
-      this.pending.clear(); this.onDisconnect();
-    });
+    port.onDisconnect.addListener(() => this.close(port));
+  }
+  close(port) {
+    if (this.port !== port) return;
+    this.port = null;
+    for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('NATIVE_DISCONNECTED')); }
+    this.pending.clear(); this.onDisconnect();
+    try { port.disconnect?.(); } catch { /* already disconnected */ }
   }
   request(type, payload = {}) {
     this.connect();
     const id = `${Date.now()}-${++this.serial}`;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('NATIVE_TIMEOUT')); }, this.timeoutMs);
+      const port = this.port;
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('NATIVE_TIMEOUT')); this.close(port); }, this.timeoutMs);
       this.pending.set(id, {resolve, reject, timer});
       try { this.port.postMessage({v: 1, id, type, payload}); }
       catch { clearTimeout(timer); this.pending.delete(id); reject(new Error('NATIVE_DISCONNECTED')); }

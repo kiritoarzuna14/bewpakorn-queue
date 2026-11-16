@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 function event(){const listeners=[];return {addListener:f=>listeners.push(f),emit(...args){return listeners.map(f=>f(...args));}};}
 test('ChromeMock: startup reconciles without claiming; completion is durable and tied to visible job',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'queue-test-'));try{
-    for(const file of ['worker.js','native.js','package.json']) await copyFile(new URL(`../../extension/${file}`,import.meta.url),join(dir,file));
+    for(const file of ['worker.js','native.js','notifications.js','package.json']) await copyFile(new URL(`../../extension/${file}`,import.meta.url),join(dir,file));
     await writeFile(join(dir,'shop.js'),`export const defaultCatalog=async()=>[]; export const discoverCatalog=async()=>[]; export const scanOrders=async()=>[]; export const openAndReadOrder=async()=>({username:'u',password:'secret'});`);
     await writeFile(join(dir,'queue.js'),`export const validateCatalog=()=>true; export const selectPending=x=>x;`);
     const job={jobId:'job1',generation:1,completionToken:'token',order:{orderId:'1'},state:'blocked',customer:{state:'blocked'},operator:{state:'ready'}};
@@ -15,7 +15,9 @@ test('ChromeMock: startup reconciles without claiming; completion is durable and
     globalThis.chrome={runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:message,sendMessage:async()=>{}},storage:{local:{get:async key=>({[key]:storage[key]}),set:async values=>Object.assign(storage,values),remove:async key=>{delete storage[key];}}},notifications:{create:async()=>{}},action:{setBadgeText:async()=>{},onClicked:event()},sidePanel:{open:async()=>{}}};
     await import(pathToFileURL(join(dir,'worker.js')));await new Promise(r=>setTimeout(r,10));assert.deepEqual(calls,['GET_SNAPSHOT']);
     const send=(type,payload)=>new Promise(resolve=>message.emit({type,payload},{id:'test',url:'chrome-extension://test/panel.html'},resolve));
+    port.onDisconnect.emit();const recovered=await send('UI_GET');assert.equal(recovered.payload.connection,'connected');assert.equal(calls.filter(x=>x==='GET_SNAPSHOT').length,2);assert.equal(calls.includes('CLAIM_ORDER'),false);
     const stale=await send('UI_COMPLETE',{jobId:'job2',orderId:'1',generation:1,completionToken:'token'});assert.equal(stale.error.code,'STALE_JOB');assert.equal(calls.includes('COMPLETE_CURRENT'),false);
     const identity={jobId:'job1',orderId:'1',generation:1,completionToken:'token'};const [ok,duplicate]=await Promise.all([send('UI_COMPLETE',identity),send('UI_COMPLETE',identity)]);assert.equal(ok.ok,true);assert.equal(duplicate.error.code,'BUSY');assert.equal(calls.filter(x=>x==='COMPLETE_CURRENT').length,1);assert.equal(storage.completionIntent,undefined);assert.equal(ok.payload.phase,'empty');
+    storage.completionIntent={...identity,commandId:'previous'};port.onDisconnect.emit();await send('UI_GET');assert.equal(storage.completionIntent,undefined);assert.equal(calls.filter(x=>x==='COMPLETE_CURRENT').length,2);assert.equal(calls.includes('CLAIM_ORDER'),false);
   } finally {delete globalThis.chrome;await rm(dir,{recursive:true,force:true});}
 });

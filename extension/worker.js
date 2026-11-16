@@ -1,21 +1,13 @@
 import {NativeClient} from './native.js';
 import {scanOrders, openAndReadOrder, defaultCatalog, discoverCatalog} from './shop.js';
 import {selectPending, validateCatalog} from './queue.js';
+import {createNotifier} from './notifications.js';
 
 const state = {connection: 'disconnected', phase: 'idle', native: null, queue: [], configured: false};
 let busy = false;
 let syncPromise = null;
 let latestRevision = -1;
-const notified = new Set();
-async function notifyOnce(key, job, role, code) {
-  if (notified.has(key)) return;
-  notified.add(key);
-  const stored = await chrome.storage.local.get('notifiedBlockers');
-  const previous = stored.notifiedBlockers || [];
-  if (previous.includes(key)) return;
-  await chrome.storage.local.set({notifiedBlockers:[...previous, key]});
-  await chrome.notifications.create(`block-${encodeURIComponent(key)}`, {type:'basic', iconUrl:'icon.png', title:'ออเดอร์ต้องตรวจสอบ', message:`#${job.order.orderId} · ${role === 'customer' ? 'บัญชีลูกค้า' : role === 'operator' ? 'บัญชีของคุณ' : 'ออเดอร์'} · ${code}`});
-}
+const notifyOnce = createNotifier(chrome);
 const allowedCode = value => typeof value === 'string' && /^[A-Z0-9_]{1,80}$/.test(value) ? value : 'UNKNOWN_ERROR';
 function broadcast() { chrome.runtime.sendMessage({type: 'UI_STATE', payload: state}).catch(() => {}); }
 function issue(code) { state.issue = allowedCode(code); state.phase = 'blocked'; const job=state.native?.current; if(job) { notifyOnce(`${job.jobId}:job:${state.issue}`, job, 'job', state.issue).catch(() => {}); chrome.action.setBadgeText({text:'!'}).catch(() => {}); } broadcast(); }
@@ -52,7 +44,7 @@ async function sync() {
       snapshot(ack); await chrome.storage.local.remove('completionIntent');
     }
     delete state.issue; broadcast();
-  })().finally(() => { syncPromise = null; });
+  })().catch(error => { state.connection = 'disconnected'; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); throw error; }).finally(() => { syncPromise = null; });
   return syncPromise;
 }
 async function next() {
@@ -64,7 +56,9 @@ async function next() {
   state.queue = pending;
   if (!pending.length) { state.phase = 'empty'; broadcast(); return; }
   const order = pending[0];
-  const claimOrder = Object.fromEntries(['shopId','orderId','productId','productName','mapId','mapName','placeId','operatorUserId','createdAt','customerUsername','quantity'].map(key => [key, order[key] ?? (key === 'customerUsername' ? '' : undefined)]));
+  // Username is deliberately blank at claim: the host binds it exactly once
+  // when the claimed order's credential form is read in PREPARE_CUSTOMER.
+  const claimOrder = Object.fromEntries(['shopId','orderId','productId','productName','mapId','mapName','placeId','operatorUserId','createdAt','customerUsername','quantity'].map(key => [key, order[key] ?? (key === 'customerUsername' ? '' : null)]));
   const claimed = await native.request('CLAIM_ORDER', {order:claimOrder}); snapshot(claimed);
   const job = state.native?.current;
   if (!job || job.order.orderId !== order.orderId) throw new Error('CLAIM_MISMATCH');
@@ -103,7 +97,21 @@ async function handle(message) {
     case 'UI_COMPLETE': await complete(message.payload); return state;
     case 'UI_ACCOUNTS': return native.request('GET_ACCOUNT_METADATA');
     case 'UI_OPTIONS_GET': return {config:await config(), products:await discoverCatalog()};
-    case 'UI_OPTIONS_SAVE': if (!validConfig(message.payload)) throw new Error('INVALID_CATALOG'); await chrome.storage.local.set({config:message.payload}); await config(); broadcast(); return state;
+    case 'UI_OPTIONS_SAVE': {
+      if (!validConfig(message.payload) || !message.payload.catalog.length) throw new Error('INVALID_CATALOG');
+      const authority = new Map((await discoverCatalog()).map(p => [p.productId, p]));
+      const accountMetadata = await native.request('GET_ACCOUNT_METADATA');
+      if (!Array.isArray(accountMetadata?.accounts)) throw new Error('INVALID_CATALOG');
+      const mappings = new Map();
+      for (const item of message.payload.catalog) {
+        const known = authority.get(item.productId);
+        if (!known || ['productName','mapId','mapName','placeId'].some(key => item[key] !== known[key])) throw new Error('INVALID_CATALOG');
+        if (item.operatorUserId && !accountMetadata.accounts.some(a => String(a.userId) === item.operatorUserId && String(a.placeId) === item.placeId)) throw new Error('INVALID_CATALOG');
+        if (mappings.has(item.mapId) && mappings.get(item.mapId) !== item.operatorUserId) throw new Error('INVALID_CATALOG');
+        mappings.set(item.mapId, item.operatorUserId);
+      }
+      await chrome.storage.local.set({config:message.payload}); await config(); broadcast(); return state;
+    }
     default: throw new Error('UNKNOWN_COMMAND');
   }
 }

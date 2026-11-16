@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const labels = {waiting:'รอเตรียม',preparing:'กำลังเตรียม',ready:'ล็อกอินแล้ว',blocked:'ต้องตรวจสอบ'};
-const problems = {SETUP_REQUIRED:'กรุณาตั้งค่าและจับคู่บัญชีก่อนเริ่ม',NATIVE_DISCONNECTED:'ยังเชื่อมต่อตัวเชื่อมในเครื่องไม่ได้',NATIVE_TIMEOUT:'ตัวเชื่อมตอบกลับช้า กรุณาตรวจสอบการเชื่อมต่อ',ORDER_CREDENTIALS_MISSING:'อ่านข้อมูลบัญชีลูกค้าไม่ครบ กรุณาตรวจหน้าออเดอร์',RECOVERY_REQUIRED:'งานเดิมต้องตรวจสอบหลังเปิดระบบใหม่',UNKNOWN_ERROR:'ตรวจสอบรายละเอียดงานและลองอีกครั้ง'};
+const problems = {SETUP_REQUIRED:'กรุณาตั้งค่าและจับคู่บัญชีก่อนเริ่ม',NATIVE_DISCONNECTED:'ยังเชื่อมต่อตัวเชื่อมในเครื่องไม่ได้',NATIVE_TIMEOUT:'ตัวเชื่อมตอบกลับช้า กรุณาตรวจสอบการเชื่อมต่อ',ORDER_CREDENTIALS_MISSING:'อ่านข้อมูลบัญชีลูกค้าไม่ครบ กรุณาตรวจหน้าออเดอร์',ORDER_FIELDS_INVALID:'อ่านช่องบัญชีลูกค้าไม่ครบ กรุณาตรวจหน้าออเดอร์',RECOVERY_REQUIRED:'งานเดิมต้องตรวจสอบหลังเปิดระบบใหม่',CUSTOMER_PHONE_VERIFICATION:'บัญชีลูกค้ารอการยืนยันผ่านมือถือ กรุณาจัดการในหน้าต่างล็อกอิน',CUSTOMER_OTP_REQUIRED:'บัญชีลูกค้ารอรหัสยืนยัน กรุณากรอกเองในหน้าต่างล็อกอิน',CUSTOMER_CAPTCHA_REQUIRED:'บัญชีลูกค้ารอการยืนยัน CAPTCHA กรุณาจัดการเองในหน้าต่างล็อกอิน',CUSTOMER_PASSWORD_INVALID:'บัญชีลูกค้าล็อกอินไม่ผ่าน กรุณาตรวจรหัสผ่าน',LOGIN_FORM_TIMEOUT:'ยังเปิดหน้าล็อกอินไม่ได้ กรุณาตรวจการเชื่อมต่อ',CUSTOMER_LOGIN_TIMEOUT:'ยังยืนยันการล็อกอินของลูกค้าไม่ได้ กรุณาตรวจหน้าต่างล็อกอิน',UNKNOWN_ERROR:'ตรวจสอบรายละเอียดงานและลองอีกครั้ง'};
 let visible = null, locked = false, armedAt = 0, previous = '', latestState = null;
 const send = (type,payload) => chrome.runtime.sendMessage({type,payload});
 function render(s) {
@@ -23,3 +23,6 @@ $('complete').addEventListener('keydown',e=>{if(e.repeat && (e.key==='Enter'||e.
 $('complete').addEventListener('click',async e=>{if(locked || !visible || Date.now()<armedAt || e.detail>1) return; locked=true; $('complete').disabled=true; const identity={...visible}; try { const r=await send('UI_COMPLETE',identity); if(r.ok) render(r.payload); else { $('issue').hidden=false; $('issue').textContent=`ไม่สามารถจบงานได้ (${r.error.code})`; } } catch { $('issue').hidden=false; $('issue').textContent='ขาดการเชื่อมต่อ กำลังรอผลคำสั่งเดิม'; } finally { locked=false; setTimeout(()=>send('UI_GET').then(r=>r.ok&&render(r.payload)).catch(()=>{}),850); }});
 chrome.runtime.onMessage.addListener(m=>{if(m.type==='UI_STATE') render(m.payload);});
 send('UI_GET').then(r=>{if(r.ok) render(r.payload);}).catch(()=>{ $('connection').textContent='ยังไม่เชื่อมต่อ'; });
+// Only the open panel polls. A poll reconciles snapshots and pending completion;
+// it never starts a round or selects a new order.
+setInterval(()=>send('UI_GET').then(r=>{if(r.ok) render(r.payload);}).catch(()=>{}),5000);
