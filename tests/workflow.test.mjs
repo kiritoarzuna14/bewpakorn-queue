@@ -11,7 +11,7 @@ test('real worker + shop + queue: explicit start, two roles, oldest first, edito
  const runtimeMessage=event(),action=event();
  const port={onMessage:event(),onDisconnect:event(),postMessage(m){nativeCalls.push(m);queueMicrotask(()=>{
   let payload;
-  if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
+  if(m.type==='GET_CAPABILITIES')payload={dualClientLaunch:true,operatorPools:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
   else if(m.type==='CLAIM_ORDER'){
    assert.deepEqual(m.payload.protectedOperatorUserIds?.slice().sort(),['123','456']);
    assert.equal(current,null);const order=m.payload.order;current={jobId:`job${++serial}`,generation:1,completionToken:`token${serial}`,order,state:'preparing',customer:{state:'waiting',username:''},operator:{userId:order.operatorUserId,state:'ready',username:'operator_demo'}};revision++;payload={revision,current,handled};

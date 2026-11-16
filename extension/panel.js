@@ -1,6 +1,7 @@
 import {problems} from './messages.js';
 const $ = id => document.getElementById(id);
 const labels = {waiting:'รอเตรียม',preparing:'กำลังเตรียม',ready:'ล็อกอินแล้ว',blocked:'ต้องตรวจสอบ'};
+const gameLabels={waiting:'รอเปิดเกม',preparing:'กำลังเข้าเกม',connected:'เข้าเกมแล้ว',blocked:'เกมต้องตรวจสอบ',closed:'ปิดเกมแล้ว'};
 
 let visible = null, locked = false, armedAt = 0, previous = '', latestState = null;
 
@@ -16,7 +17,7 @@ function render(s) {
   const details=$('order-details'); details.replaceChildren();
   if (j) { const strong=document.createElement('strong'); strong.textContent=j.order.mapName || 'แมพ'; details.append(strong,document.createElement('br'),document.createTextNode(`${j.order.productName || 'สินค้า'} · จำนวน ${j.order.quantity ?? 'ดูในออเดอร์'}`),document.createElement('br'),document.createTextNode(displayDate(j.order.createdAt))); }
   else details.textContent=s.phase==='empty'?'คิวครบแล้ว':s.phase==='scanning'?'กำลังอ่านคิว':s.configured?'กดไอคอนส่วนขยายเพื่อเริ่มรอบงาน':'เริ่มจากตั้งค่าและจับคู่บัญชี';
-  for (const role of ['customer','operator']) { const r=j?.[role]; $(`${role}-name`).textContent=r?.username || (role==='customer'?j?.order.customerUsername:'') || '—'; $(`${role}-state`).textContent=labels[r?.state] || 'รอออเดอร์'; }
+  for (const role of ['customer','operator']) { const r=j?.[role]; $(`${role}-name`).textContent=r?.username || (role==='customer'?j?.order.customerUsername:'') || '—'; $(`${role}-state`).textContent=gameLabels[r?.game?.state] || labels[r?.state] || 'รอออเดอร์'; }
   const code=s.issue || j?.code || j?.customer?.code || j?.operator?.code; $('issue').hidden=!code; $('issue').textContent=j?.customer?.canResume?'ออเดอร์เดิมยังอยู่ กดไอคอนส่วนขยายเพื่อเตรียมงานนี้ต่อได้':code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : '';
   $('complete').disabled=!j || locked || s.completionPending || s.connection!=='connected' || Date.now()<armedAt;
   $('queue-count').textContent=s.queue?.length ? `รออีก ${s.queue.length}` : '';

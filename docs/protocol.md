@@ -25,3 +25,17 @@ Extension internal UI messages `{type:'UI_GET'|'UI_START'|'UI_COMPLETE'|'UI_OPTI
 
 Shop module exports async `scanOrders(config)` => array of metadata and `openAndReadOrder(order)` => `{tabId,username,password}` (password transient only). Only extension worker calls it. `scanOrders` must throw rather than claim global oldest if page coverage unknown. Export `defaultCatalog()` and optional `discoverCatalog()` for options. Catalog config `{version:1,catalog:[{productId,productName,mapId,mapName,placeId,operatorUserId}],shopOrigin:'https://bewpakorn.rdcw.xyz'}`. Product names are display only, IDs are eligibility authority.
 
+
+## v1.1.0 additions — dual clients and operator pools (binding)
+
+`GET_CAPABILITIES` additionally returns `dualClientLaunch:true` and `operatorPools:true`.
+
+`CLAIM_ORDER` order gains `operatorUserIds:string[]` (ordered pool) and `privateServerSourceUserId`. Legacy `operatorUserId` stays as the first pool member for migration and display. `protectedOperatorUserIds` is the union of every configured pool plus the private-source id, so a customer can never be a shop account. Native persists `rotation` per shop+map and selects the next pool member at claim; duplicate claims, resume, reconnect and restarts reuse that selection. All enabled products of one map must share the identical ordered pool and private source.
+
+`LAUNCH_PAIR {jobId,generation}` starts or resumes only the current pair. A fresh customer success may schedule its pair automatically because that order was already started by the user; startup/recovery alone never launches. The native worker validates distinct identities, the source account's canonical saved private destination (same place, single `privateServerLinkCode`), obtains a separate ticket per role and launches operator then customer through the trusted registered protocol. Ownership is the exact ticket in the command line plus process start time; the game log is read only when Restart Manager proves it belongs to the owned PID and process FILETIME.
+
+Snapshot roles add `game:{state:'waiting'|'preparing'|'connected'|'blocked'|'closed',code?,pid?,startTimeUtcTicks?,placeId?,serverInstanceId?}`. `connected` requires an owned, still-running client whose current join sequence is a private-server join for the expected place and account, an accepted network connection, an entered play session, and no later disconnect/teleport/exit marker. The pair is `connected` only when both clients are alive with identical nonempty server GUIDs.
+
+`COMPLETE_CURRENT` cancels pending pair launches and closes only the two clients proven owned by that job (CloseMainWindow, never Kill). Unknown ownership or a surviving owned client keeps completion pending with `PAIR_CLEANUP_UNCERTAIN`/`PAIR_CLEANUP_PENDING`; the order is not advanced.
+
+Roblox allows concurrent clients only while something else owns the named mutex `ROBLOX_singletonMutex`; otherwise a new client asks the earlier one to close (`Received close main window request`). RAM holds that mutex by the same mechanism. The host therefore acquires and holds it on a dedicated thread when no owner exists, reports `external` ownership when another process holds it, and fails the launch path with `PAIR_MULTI_CLIENT_UNAVAILABLE` when ownership cannot be established.

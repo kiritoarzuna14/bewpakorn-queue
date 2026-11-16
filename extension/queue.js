@@ -8,12 +8,30 @@ export const MAPS = Object.freeze([
 
 export function fault(code) { return Object.assign(new Error(code), {code}); }
 const validId = v => typeof v === 'string' && /^[a-z0-9]{10,80}$/.test(v);
+const validUserId = v => typeof v === 'string' && /^[1-9][0-9]{0,19}$/.test(v);
+export function operatorPool(item) {
+  if (!item || typeof item !== 'object') throw fault('CONFIG_INVALID');
+  if (item.operatorUserIds !== undefined) {
+    const pool = item.operatorUserIds;
+    if (!Array.isArray(pool) || pool.length > 20 || pool.some(id => !validUserId(id)) || new Set(pool).size !== pool.length) throw fault('CONFIG_INVALID');
+    return [...pool];
+  }
+  if (item.operatorUserId === '' || item.operatorUserId === undefined) return [];
+  if (!validUserId(item.operatorUserId)) throw fault('CONFIG_INVALID');
+  return [item.operatorUserId];
+}
 export function validateCatalog(config) {
   if (!config || config.version !== 1 || config.shopOrigin !== SHOP_ORIGIN || !Array.isArray(config.catalog) || config.catalog.length > 2000) throw fault('CONFIG_INVALID');
-  const ids = new Set();
+  const ids = new Set(), mapSettings = new Map();
   for (const p of config.catalog) {
     const map = MAPS.find(m => m.mapId === p.mapId);
-    if (!map || !validId(p.productId) || ids.has(p.productId) || p.placeId !== map.placeId || typeof p.productName !== 'string' || !p.productName.trim() || p.productName.length > 300 || (p.operatorUserId !== '' && !/^[1-9][0-9]{0,19}$/.test(p.operatorUserId))) throw fault('CONFIG_INVALID');
+    if (!map || !validId(p.productId) || ids.has(p.productId) || p.placeId !== map.placeId || typeof p.productName !== 'string' || !p.productName.trim() || p.productName.length > 300 || (p.operatorUserId !== '' && !validUserId(p.operatorUserId))) throw fault('CONFIG_INVALID');
+    const pool = operatorPool(p);
+    if (p.privateServerSourceUserId !== undefined && !validUserId(p.privateServerSourceUserId)) throw fault('CONFIG_INVALID');
+    if (p.operatorUserIds !== undefined && p.operatorUserId !== (pool[0] || '')) throw fault('CONFIG_INVALID');
+    const binding = JSON.stringify([pool, p.privateServerSourceUserId ?? p.operatorUserId]);
+    if (mapSettings.has(p.mapId) && mapSettings.get(p.mapId) !== binding) throw fault('CONFIG_INVALID');
+    mapSettings.set(p.mapId, binding);
     ids.add(p.productId);
   }
   return true;
@@ -59,7 +77,7 @@ export function normalizeOrder(row, catalog) {
   if (!p || row.status !== 'PROCESSING') return null;
   const map = MAPS.find(m => m.mapId === p.mapId);
   if (row.variant?.productGroup?.category?.id !== map.categoryId || !validId(row.id)) throw fault('PRODUCT_IDENTITY_CHANGED');
-  return {shopId: SHOP_ID, orderId: row.id, productId: p.productId, productName: p.productName, mapId: map.mapId, mapName: map.mapName, placeId: map.placeId, operatorUserId: p.operatorUserId, createdAt: parseCreatedAt(row.createdAt), customerUsername: '', quantity: null, status: 'PROCESSING', editUrl: `${SHOP_ORIGIN}/manager/orders/${row.id}/edit`};
+  return {shopId: SHOP_ID, orderId: row.id, productId: p.productId, productName: p.productName, mapId: map.mapId, mapName: map.mapName, placeId: map.placeId, operatorUserId: p.operatorUserId, ...(p.operatorUserIds !== undefined ? {operatorUserIds: operatorPool(p)} : {}), ...(p.privateServerSourceUserId !== undefined ? {privateServerSourceUserId: p.privateServerSourceUserId} : {}), createdAt: parseCreatedAt(row.createdAt), customerUsername: '', quantity: null, status: 'PROCESSING', editUrl: `${SHOP_ORIGIN}/manager/orders/${row.id}/edit`};
 }
 
 export function readCredentialForm(detail, order) {

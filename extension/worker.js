@@ -1,9 +1,9 @@
 import {NativeClient} from './native.js';
 import {scanOrders, openAndReadOrder, defaultCatalog, discoverCatalog} from './shop.js';
-import {selectPending, validateCatalog} from './queue.js';
+import {selectPending, validateCatalog, operatorPool} from './queue.js';
 import {createNotifier, blockerRoles} from './notifications.js';
 
-const state = {connection: 'disconnected', phase: 'idle', native: null, queue: [], configured: false, completionPending:false};
+const state = {connection: 'disconnected', phase: 'idle', native: null, queue: [], configured: false, completionPending:false,capabilities:null};
 let busy = false;
 let starting = false;
 let syncPromise = null;
@@ -26,7 +26,8 @@ function snapshot(value) {
   chrome.action.setBadgeText({text: job?.state === 'blocked' ? '!' : ''}).catch(() => {});
   broadcast();
 }
-const native = new NativeClient(chrome, snapshot, () => { state.connection = 'disconnected'; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); });
+const native = new NativeClient(chrome, snapshot, () => { state.connection = 'disconnected';state.capabilities=null; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); });
+async function requirePairCapability(){if(!state.capabilities)state.capabilities=await native.request('GET_CAPABILITIES');if(state.capabilities.dualClientLaunch!==true||state.capabilities.operatorPools!==true)throw new Error('NATIVE_UPDATE_REQUIRED');}
 async function config() {
   const stored = await chrome.storage.local.get('config');
   const value = stored.config || {version:1, shopOrigin:'https://bewpakorn.rdcw.xyz', catalog:await defaultCatalog()};
@@ -45,12 +46,16 @@ async function sync() {
       const ack = await native.request('COMPLETE_CURRENT', completionIntent);
       snapshot(ack); await chrome.storage.local.remove('completionIntent');
       state.completionPending = false;
+      // This is the continuation of an explicit Success, including the normal
+      // wait for owned game windows to close; it is not a new idle round.
+      if(completionIntent.advanceAfterAck && !state.native?.current)await next();
     }
     delete state.issue; broadcast();
   })().catch(error => { if (error.kind === 'application') { state.connection = 'connected'; issue(error.message); } else { state.connection = 'disconnected'; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); } throw error; }).finally(() => { syncPromise = null; });
   return syncPromise;
 }
 async function next() {
+  await requirePairCapability();
   const cfg = await config();
   if (!state.configured) throw new Error('SETUP_REQUIRED');
   delete state.issue; state.phase = 'scanning'; broadcast();
@@ -62,7 +67,8 @@ async function next() {
   // Username is deliberately blank at claim: the host binds it exactly once
   // when the claimed order's credential form is read in PREPARE_CUSTOMER.
   const claimOrder = Object.fromEntries(['shopId','orderId','productId','productName','mapId','mapName','placeId','operatorUserId','createdAt','customerUsername','quantity'].map(key => [key, order[key] ?? (key === 'customerUsername' ? '' : null)]));
-  const protectedOperatorUserIds = [...new Set(cfg.catalog.map(p=>p.operatorUserId).filter(Boolean))];
+  claimOrder.operatorUserIds=operatorPool(order);claimOrder.privateServerSourceUserId=order.privateServerSourceUserId||order.operatorUserId||claimOrder.operatorUserIds[0]||'';
+  const protectedOperatorUserIds = [...new Set(cfg.catalog.flatMap(p=>[...operatorPool(p),p.privateServerSourceUserId||p.operatorUserId].filter(Boolean)))];
   const claimed = await native.request('CLAIM_ORDER', {order:claimOrder, protectedOperatorUserIds}); snapshot(claimed);
   const job = state.native?.current;
   if (!job || job.order.orderId !== order.orderId) throw new Error('CLAIM_MISMATCH');
@@ -84,7 +90,7 @@ async function prepareCurrent(job) {
 async function start() {
   if (busy || starting) throw new Error('BUSY');
   starting = true;
-  try { await sync();const job=state.native?.current;if(!job)await next();else if(job.customer?.canResume){const resumed=await native.request('RESUME_UNSUBMITTED',{jobId:job.jobId,generation:job.generation});snapshot(resumed);if(state.native?.current)await prepareCurrent(state.native.current);} }
+  try { await sync();await requirePairCapability();const job=state.native?.current;if(!job)await next();else if(job.customer?.canResume){const resumed=await native.request('RESUME_UNSUBMITTED',{jobId:job.jobId,generation:job.generation});snapshot(resumed);if(state.native?.current)await prepareCurrent(state.native.current);}else if(job.customer?.userId){snapshot(await native.request('LAUNCH_PAIR',{jobId:job.jobId,generation:job.generation}));} }
   finally { starting = false; }
 }
 async function complete(identity) {
@@ -94,7 +100,7 @@ async function complete(identity) {
   busy = true;
   try {
     if ((await chrome.storage.local.get('completionIntent')).completionIntent) throw new Error('COMPLETION_PENDING');
-    const intent = {commandId:crypto.randomUUID(), jobId:identity.jobId, orderId:identity.orderId, generation:identity.generation, completionToken:identity.completionToken};
+    const intent = {commandId:crypto.randomUUID(), jobId:identity.jobId, orderId:identity.orderId, generation:identity.generation, completionToken:identity.completionToken,advanceAfterAck:true};
     await chrome.storage.local.set({completionIntent:intent});
     state.completionPending = true; broadcast();
     const ack = await native.request('COMPLETE_CURRENT', intent); snapshot(ack);
@@ -119,9 +125,10 @@ async function handle(message) {
       for (const item of message.payload.catalog) {
         const known = authority.get(item.productId);
         if (!known || ['productName','mapId','mapName','placeId'].some(key => item[key] !== known[key])) throw new Error('INVALID_CATALOG');
-        if (item.operatorUserId && !accountMetadata.accounts.some(a => String(a.userId) === item.operatorUserId && String(a.placeId) === item.placeId)) throw new Error('INVALID_CATALOG');
-        if (mappings.has(item.mapId) && mappings.get(item.mapId) !== item.operatorUserId) throw new Error('INVALID_CATALOG');
-        mappings.set(item.mapId, item.operatorUserId);
+        const pool=operatorPool(item),source=item.privateServerSourceUserId||item.operatorUserId||pool[0];
+        if(!pool.length||pool.some(id=>!accountMetadata.accounts.some(a=>String(a.userId)===id)))throw new Error('INVALID_CATALOG');
+        if(!accountMetadata.accounts.some(a=>String(a.userId)===source&&a.hasPrivateDestination===true&&String(a.privatePlaceId)===item.placeId))throw new Error('INVALID_CATALOG');
+        const binding=JSON.stringify({pool,source});if(mappings.has(item.mapId)&&mappings.get(item.mapId)!==binding)throw new Error('INVALID_CATALOG');mappings.set(item.mapId,binding);
       }
       await chrome.storage.local.set({config:message.payload}); await config();
       const enabledProducts=new Set(message.payload.catalog.map(p=>p.productId));state.queue=state.queue.filter(o=>enabledProducts.has(o.productId));
