@@ -3,12 +3,14 @@ import {scanOrders, openAndReadOrder, defaultCatalog, discoverCatalog} from './s
 import {selectPending, validateCatalog} from './queue.js';
 import {createNotifier, blockerRoles} from './notifications.js';
 
-const state = {connection: 'disconnected', phase: 'idle', native: null, queue: [], configured: false};
+const state = {connection: 'disconnected', phase: 'idle', native: null, queue: [], configured: false, completionPending:false};
 let busy = false;
+let starting = false;
 let syncPromise = null;
 let latestRevision = -1;
 const notifyOnce = createNotifier(chrome);
 const allowedCode = value => typeof value === 'string' && /^[A-Z0-9_]{1,80}$/.test(value) ? value : 'UNKNOWN_ERROR';
+const ownsJob = job => state.native?.current?.jobId === job.jobId && state.native.current.generation === job.generation;
 function broadcast() { chrome.runtime.sendMessage({type: 'UI_STATE', payload: state}).catch(() => {}); }
 function issue(code) { state.issue = allowedCode(code); state.phase = 'blocked'; const job=state.native?.current; if(job) { notifyOnce(`${job.jobId}:job:${state.issue}`, job, 'job', state.issue).catch(() => {}); chrome.action.setBadgeText({text:'!'}).catch(() => {}); } broadcast(); }
 function snapshot(value) {
@@ -36,14 +38,16 @@ async function sync() {
   if (syncPromise) return syncPromise;
   syncPromise = (async () => {
     await config();
-    const result = await native.request('GET_SNAPSHOT'); snapshot(result);
     const {completionIntent} = await chrome.storage.local.get('completionIntent');
+    state.completionPending = Boolean(completionIntent);
+    const result = await native.request('GET_SNAPSHOT'); snapshot(result);
     if (completionIntent) {
       const ack = await native.request('COMPLETE_CURRENT', completionIntent);
       snapshot(ack); await chrome.storage.local.remove('completionIntent');
+      state.completionPending = false;
     }
     delete state.issue; broadcast();
-  })().catch(error => { state.connection = 'disconnected'; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); throw error; }).finally(() => { syncPromise = null; });
+  })().catch(error => { if (error.kind === 'application') { state.connection = 'connected'; issue(error.message); } else { state.connection = 'disconnected'; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); } throw error; }).finally(() => { syncPromise = null; });
   return syncPromise;
 }
 async function next() {
@@ -58,22 +62,27 @@ async function next() {
   // Username is deliberately blank at claim: the host binds it exactly once
   // when the claimed order's credential form is read in PREPARE_CUSTOMER.
   const claimOrder = Object.fromEntries(['shopId','orderId','productId','productName','mapId','mapName','placeId','operatorUserId','createdAt','customerUsername','quantity'].map(key => [key, order[key] ?? (key === 'customerUsername' ? '' : null)]));
-  const claimed = await native.request('CLAIM_ORDER', {order:claimOrder}); snapshot(claimed);
+  const protectedOperatorUserIds = [...new Set(cfg.catalog.map(p=>p.operatorUserId).filter(Boolean))];
+  const claimed = await native.request('CLAIM_ORDER', {order:claimOrder, protectedOperatorUserIds}); snapshot(claimed);
   const job = state.native?.current;
   if (!job || job.order.orderId !== order.orderId) throw new Error('CLAIM_MISMATCH');
   state.queue = pending.slice(1); broadcast();
   try {
+    if (!ownsJob(job)) return;
     const credentials = await openAndReadOrder(order);
+    // Success may arrive while the detail request is pending. Its old result
+    // must not submit credentials or replace the next job's visible problem.
+    if (!ownsJob(job)) return;
     if (!credentials?.username || !credentials?.password) throw new Error('ORDER_CREDENTIALS_MISSING');
     const result = await native.request('PREPARE_CUSTOMER', {jobId:job.jobId, generation:job.generation, username:credentials.username, password:credentials.password});
     snapshot(result);
-  } catch (error) { issue(error.message || 'ORDER_READ_FAILED'); }
+  } catch (error) { if (ownsJob(job)) issue(error.message || 'ORDER_READ_FAILED'); }
 }
 async function start() {
-  if (busy) throw new Error('BUSY');
-  busy = true;
+  if (busy || starting) throw new Error('BUSY');
+  starting = true;
   try { await sync(); if (!state.native?.current) await next(); }
-  finally { busy = false; }
+  finally { starting = false; }
 }
 async function complete(identity) {
   if (busy) throw new Error('BUSY');
@@ -84,8 +93,10 @@ async function complete(identity) {
     if ((await chrome.storage.local.get('completionIntent')).completionIntent) throw new Error('COMPLETION_PENDING');
     const intent = {commandId:crypto.randomUUID(), jobId:identity.jobId, orderId:identity.orderId, generation:identity.generation, completionToken:identity.completionToken};
     await chrome.storage.local.set({completionIntent:intent});
+    state.completionPending = true; broadcast();
     const ack = await native.request('COMPLETE_CURRENT', intent); snapshot(ack);
     await chrome.storage.local.remove('completionIntent');
+    state.completionPending = false;
     await next();
   } finally { busy = false; }
 }
@@ -122,4 +133,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 chrome.action.onClicked.addListener(tab => { chrome.sidePanel.open({windowId:tab.windowId}).catch(() => {}); start().catch(error => issue(error.message)); });
 // Reconcile an existing job or completion only; never select a new order on wake.
-sync().catch(() => { state.connection = 'disconnected'; broadcast(); });
+sync().catch(() => {});

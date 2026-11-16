@@ -1,3 +1,4 @@
+import {problemMessage} from './messages.js';
 // A job-level code that repeats a role code describes the same blocker.
 export function blockerRoles(job) {
   if (!job) return [];
@@ -16,7 +17,7 @@ export function createNotifier(chromeApi) {
       if (previous.includes(key)) return;
       const roleName = role === 'customer' ? 'บัญชีลูกค้า' : role === 'operator' ? 'บัญชีของคุณ' : 'ออเดอร์';
       const username = role === 'customer' ? job.customer?.username : role === 'operator' ? job.operator?.username : '';
-      await chromeApi.notifications.create(`block-${encodeURIComponent(key)}`, {type:'basic', iconUrl:'icon.png', title:'ออเดอร์ต้องตรวจสอบ', message:`#${job.order.orderId} · ${roleName} ${username || ''} · ${job.order.mapName || ''} · ${code}`});
+      await chromeApi.notifications.create(`block-${encodeURIComponent(key)}`, {type:'basic', iconUrl:'icon.png', title:'ออเดอร์ต้องตรวจสอบ', message:`#${job.order.orderId} · ${roleName} ${username || ''} · ${job.order.mapName || ''}\n${problemMessage(code)}`});
       await chromeApi.storage.local.set({notifiedBlockers:[...previous, key]});
     });
     chain = task.catch(() => {});

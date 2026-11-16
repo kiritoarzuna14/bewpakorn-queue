@@ -13,7 +13,7 @@ export class NativeClient {
       if (message.type !== 'RESULT' || !this.pending.has(message.id)) return;
       const request = this.pending.get(message.id); this.pending.delete(message.id); clearTimeout(request.timer);
       if (message.ok === true) request.resolve(message.payload);
-      else request.reject(new Error(message.error?.code || 'NATIVE_ERROR'));
+      else request.reject(Object.assign(new Error(message.error?.code || 'NATIVE_ERROR'), {kind:'application'}));
     });
     port.onDisconnect.addListener(() => this.close(port));
   }

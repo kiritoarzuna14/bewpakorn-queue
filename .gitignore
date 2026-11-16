@@ -4,3 +4,4 @@ native/packages/
 node_modules/
 work-*
 *.user
+docs/briefs/*.diff
