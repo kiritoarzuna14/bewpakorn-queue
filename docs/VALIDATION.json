@@ -1,62 +1,68 @@
-{
-  "version": "1.1.2",
-  "date": "2026-11-17",
-  "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "pending release commit",
-  "changes": [
-    "The order editor tab is created once and reused for every order, always with active:false in the window the user is already in, so advancing the queue no longer opens or focuses a new tab.",
-    "Login problems are detected from the live page wording, which reports a rejected login as plain body text ('Incorrect username or password.') rather than an alert. Mail-code, passkey/identity-verification and rate-limit screens are reported separately.",
-    "A login that never produced a customer session can be retried on the same order by pressing the toolbar icon (RESUME_UNSUBMITTED), instead of being stuck until Success skips the order."
-  ],
-  "nodeTests": {
-    "passed": 33,
-    "failed": 0,
-    "added": "login-detection.test.mjs executes the shared browser script from LoginFormScripts.cs against the captions captured from the live Sign in page"
-  },
-  "nativeBuild": "passed (x64 .NET Framework compiler)",
-  "nativeSelfTests": "passed: identity/ACK/persistence/cancel, operator rotation and pair fixtures, plus resume now allowed after a submitted-but-unsuccessful login and still refused when an import intent is unsettled or the code is not retryable",
-  "liveLoginProbe": {
-    "account": "none (random nonexistent username, dummy password)",
-    "page": "https://www.roblox.com/login",
-    "capturedText": "Incorrect username or password.",
-    "container": "plain body text, no role=alert element",
-    "surfaceCheck": "LOGIN_FORM_READY, username/password/submit present, submit disabled until filled"
-  },
-  "livePairTests": [
-    {
-      "mode": "explicit_owned_pair_test",
-      "operators": ["BewFNTH1 (7219078061) as operator", "BewFNTH2 (7219088985) as customer/private-source"],
-      "connected": true,
-      "distinctSimultaneousProcesses": true,
-      "sameLiveServerVerified": true,
-      "serverInstanceId": "f63c5383-5f79-4227-aa2f-5abe453acba7",
-      "observationSeconds": 15,
-      "ownedClientsClosed": true
-    },
-    {
-      "mode": "explicit_owned_pair_test",
-      "operators": ["BewFNTH1 (7219078061) as operator", "BewFNTH2 (7219088985) as customer/private-source"],
-      "connected": true,
-      "distinctSimultaneousProcesses": true,
-      "sameLiveServerVerified": true,
-      "observationSeconds": 15,
-      "ownedClientsClosed": true
-    }
-  ],
-  "installedHost": {
-    "stagedVersion": "1.1.2",
-    "appDirectory": "C:\\Users\\kirit\\AppData\\Local\\BewpakornQueue\\app\\versions\\1.1.2",
-    "activeExtensionPath": "D:\\BewpakornQueue-1.0.0\\extension",
-    "activeExtensionFilesVerified": 15,
-    "activation": "Chrome Reload required"
-  },
-  "renderedGameplayVerified": false,
-  "liveCustomerFlowTested": false,
-  "review": "Login detection verified against the live page wording with a fake account only; no customer credentials were used in development. The stored customer session is still the user's responsibility when Roblox asks for a challenge.",
-  "limitations": [
-    "No automated proof of rendered gameplay; logs prove join, identity and identical server only",
-    "Live test covered two of the three operator accounts; the third is covered by fixtures",
-    "The rejected-password wording was captured today; if Roblox changes it again the new detector returns to a timeout instead of a wrong-password message",
-    "RAM v30 new accounts stay Default; existing alias/description/group preserved"
-  ]
+﻿{
+    "version":  "1.1.2",
+    "date":  "2026-11-17",
+    "timezone":  "Asia/Bangkok",
+    "sourceCodeCommit":  "bae4a36b3f0f8fb37795a05857cdc69cc1f59fc8",
+    "changes":  [
+                    "The order editor tab is created once and reused for every order, always with active:false in the window the user is already in, so advancing the queue no longer opens or focuses a new tab.",
+                    "Login problems are detected from the live page wording, which reports a rejected login as plain body text (\u0027Incorrect username or password.\u0027) rather than an alert. Mail-code, passkey/identity-verification and rate-limit screens are reported separately.",
+                    "A login that never produced a customer session can be retried on the same order by pressing the toolbar icon (RESUME_UNSUBMITTED), instead of being stuck until Success skips the order."
+                ],
+    "nodeTests":  {
+                      "passed":  33,
+                      "failed":  0,
+                      "added":  "login-detection.test.mjs executes the shared browser script from LoginFormScripts.cs against the captions captured from the live Sign in page"
+                  },
+    "nativeBuild":  "passed (x64 .NET Framework compiler)",
+    "nativeSelfTests":  "passed: identity/ACK/persistence/cancel, operator rotation and pair fixtures, plus resume now allowed after a submitted-but-unsuccessful login and still refused when an import intent is unsettled or the code is not retryable",
+    "liveLoginProbe":  {
+                           "account":  "none (random nonexistent username, dummy password)",
+                           "page":  "https://www.roblox.com/login",
+                           "capturedText":  "Incorrect username or password.",
+                           "container":  "plain body text, no role=alert element",
+                           "surfaceCheck":  "LOGIN_FORM_READY, username/password/submit present, submit disabled until filled"
+                       },
+    "livePairTests":  [
+                          {
+                              "mode":  "explicit_owned_pair_test",
+                              "operators":  [
+                                                "BewFNTH1 (7219078061) as operator",
+                                                "BewFNTH2 (7219088985) as customer/private-source"
+                                            ],
+                              "connected":  true,
+                              "distinctSimultaneousProcesses":  true,
+                              "sameLiveServerVerified":  true,
+                              "serverInstanceId":  "f63c5383-5f79-4227-aa2f-5abe453acba7",
+                              "observationSeconds":  15,
+                              "ownedClientsClosed":  true
+                          },
+                          {
+                              "mode":  "explicit_owned_pair_test",
+                              "operators":  [
+                                                "BewFNTH1 (7219078061) as operator",
+                                                "BewFNTH2 (7219088985) as customer/private-source"
+                                            ],
+                              "connected":  true,
+                              "distinctSimultaneousProcesses":  true,
+                              "sameLiveServerVerified":  true,
+                              "observationSeconds":  15,
+                              "ownedClientsClosed":  true
+                          }
+                      ],
+    "installedHost":  {
+                          "stagedVersion":  "1.1.2",
+                          "appDirectory":  "C:\\Users\\kirit\\AppData\\Local\\BewpakornQueue\\app\\versions\\1.1.2",
+                          "activeExtensionPath":  "D:\\BewpakornQueue-1.0.0\\extension",
+                          "activeExtensionFilesVerified":  15,
+                          "activation":  "Chrome Reload required"
+                      },
+    "renderedGameplayVerified":  false,
+    "liveCustomerFlowTested":  false,
+    "review":  "Login detection verified against the live page wording with a fake account only; no customer credentials were used in development. The stored customer session is still the user\u0027s responsibility when Roblox asks for a challenge.",
+    "limitations":  [
+                        "No automated proof of rendered gameplay; logs prove join, identity and identical server only",
+                        "Live test covered two of the three operator accounts; the third is covered by fixtures",
+                        "The rejected-password wording was captured today; if Roblox changes it again the new detector returns to a timeout instead of a wrong-password message",
+                        "RAM v30 new accounts stay Default; existing alias/description/group preserved"
+                    ]
 }
