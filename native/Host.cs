@@ -37,7 +37,7 @@ internal static partial class Host {
  static void LoadLedger(){
   if(!File.Exists(ledgerPath)){ledger=Obj("revision",0,"current",null,"handled",new object[0],"commands",new Dictionary<string,object>());return;}
   try {var f=new FileInfo(ledgerPath); Require(f.Length>0 && f.Length<=LedgerLimit,"LEDGER_CORRUPT"); ledger=D(J.DeserializeObject(File.ReadAllText(ledgerPath,Encoding.UTF8))); Require(ledger!=null && ledger.ContainsKey("revision") && ledger.ContainsKey("current") && ledger.ContainsKey("handled") && D(ledger["commands"])!=null,"LEDGER_CORRUPT");
-   var job=D(ledger["current"]); if(job!=null){var customer=D(job["customer"]);if(customer!=null && S(customer,"code")=="LOGIN_FORM_TIMEOUT" && S(customer,"submissionAttempted")!="True" && !job.ContainsKey("importIntent"))customer["canResume"]=true;job["state"]="blocked"; job["code"]="RECOVERY_REQUIRED"; foreach(string role in new[]{"customer","operator"}) {var r=D(job[role]); if(r!=null){r["state"]="blocked";r["code"]="RECOVERY_REQUIRED";}} Bump(); Save(); }
+   var job=D(ledger["current"]); if(job!=null){var customer=D(job["customer"]);if(customer!=null && RetryableLogin(S(customer,"code")) && !job.ContainsKey("importIntent"))customer["canResume"]=true;job["state"]="blocked"; job["code"]="RECOVERY_REQUIRED"; foreach(string role in new[]{"customer","operator"}) {var r=D(job[role]); if(r!=null){r["state"]="blocked";r["code"]="RECOVERY_REQUIRED";}} Bump(); Save(); }
   } catch(HostError){throw;} catch {throw new HostError("LEDGER_CORRUPT");}
  }
  static void Bump(){ledger["revision"]=Convert.ToInt64(ledger["revision"])+1;}
@@ -77,7 +77,7 @@ internal static partial class Host {
  }
  static Dictionary<string,object> ResumeUnsubmitted(Dictionary<string,object> p){
   var job=D(ledger["current"]);Require(job!=null && S(job,"jobId")==S(p,"jobId") && S(job,"generation")==S(p,"generation"),"STALE_JOB");var role=D(job["customer"]);
-  Require(S(role,"canResume")=="True" && S(role,"submissionAttempted")!="True" && !job.ContainsKey("importIntent") && S(role,"state")!="ready","RESUME_NOT_ALLOWED");
+  Require(S(role,"canResume")=="True" && !job.ContainsKey("importIntent") && S(role,"state")!="ready","RESUME_NOT_ALLOWED");
   job["generation"]=Convert.ToInt64(job["generation"])+1;job["completionToken"]=NewId();role["state"]="waiting";role["canResume"]=false;role.Remove("code");CloseLogin();RefreshOperator(job);Bump();Save();return Snapshot();
  }
  static Dictionary<string,object> Complete(Dictionary<string,object> p){
@@ -86,7 +86,7 @@ internal static partial class Host {
   if(job.ContainsKey("importIntent")){Require(SettleIntent(job),"RAM_IMPORT_UNCERTAIN");job.Remove("importIntent");}CloseLogin();Require(CloseOwnedPair(job),"PAIR_CLOSE_PENDING");var list=A(ledger["handled"]).ToList();var order=D(job["order"]);list.Add(Obj("shopId",S(order,"shopId"),"orderId",S(order,"orderId"),"completedAt",Now(),"workflowCategory","ลูกค้าจากออเดอร์","operatorUserId",S(order,"operatorUserId")));ledger["handled"]=list.ToArray();commands[command]=Obj("jobId",S(p,"jobId"),"orderId",S(p,"orderId"),"generation",S(p,"generation"),"completionToken",S(p,"completionToken"));ledger["current"]=null;Bump();Save();return Snapshot();
  }
  static object Dispatch(string type,Dictionary<string,object> p){switch(type){
-  case "GET_CAPABILITIES":return Obj("protocolVersion",1,"version","1.1.0","webViewAvailable",WebViewAvailable(),"ramImportSupported",true,"customerGrouping",false,"groupPolicy","default-preserve-existing","dualClientLaunch",true,"operatorPools",true);
+  case "GET_CAPABILITIES":return Obj("protocolVersion",1,"version","1.1.2","webViewAvailable",WebViewAvailable(),"ramImportSupported",true,"customerGrouping",false,"groupPolicy","default-preserve-existing","dualClientLaunch",true,"operatorPools",true);
   case "GET_ACCOUNT_METADATA":return Obj("accounts",Metadata());
   case "GET_SNAPSHOT":return Snapshot();
   case "CLAIM_ORDER":return Claim(p);

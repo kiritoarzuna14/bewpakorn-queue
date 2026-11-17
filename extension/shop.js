@@ -108,16 +108,33 @@ export async function scanOrders(config, rpc = request) {
   throw fault('SCAN_INCOMPLETE');
 }
 
+// One owned editor tab is reused for every order and always stays in the
+// background window the user is already in, so advancing the queue never opens
+// or focuses a new tab.
+let editorId;
+async function getEditor(order) {
+  const url = `${SHOP_ORIGIN}/manager/orders/${order.orderId}/edit`;
+  if (!editorId) {
+    const owned = await chrome.storage.session.get('shopEditorTabId');
+    if (owned.shopEditorTabId) { try { const t = await chrome.tabs.get(owned.shopEditorTabId); if (new URL(t.url).origin === SHOP_ORIGIN) editorId = t.id; } catch {} }
+  }
+  if (editorId) { try { await chrome.tabs.update(editorId, {url}); return editorId; } catch { editorId = undefined; } }
+  const options = {url, active: false};
+  try { const win = await chrome.windows.getLastFocused({windowTypes:['normal']}); if (win && Number.isInteger(win.id)) options.windowId = win.id; } catch {}
+  const tab = await chrome.tabs.create(options);
+  editorId = tab.id;
+  await chrome.storage.session.set({shopEditorTabId: editorId});
+  return editorId;
+}
+
 export async function openAndReadOrder(order) {
   if (order.shopId !== 'bewpakorn.rdcw.xyz' || !/^[a-z0-9]{10,80}$/.test(order.orderId)) throw fault('ORDER_ID_INVALID');
   // Open even when credential validation fails: the user must be able to
   // inspect/fix this order while Success remains the only advance signal.
-  // Open in the background: advancing the queue must not pull focus away from
-  // whatever the user is doing in the current tab.
-  const tab = await chrome.tabs.create({url:`${SHOP_ORIGIN}/manager/orders/${order.orderId}/edit`,active:false});
+  const tabId = await getEditor(order);
   const detail = await request('detail',order.orderId);
   const credentials = readCredentialForm(detail,order);
-  return {tabId:tab.id,...credentials};
+  return {tabId,...credentials};
 }
 
 export async function defaultCatalog() {

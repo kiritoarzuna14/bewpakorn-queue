@@ -37,6 +37,8 @@ Object.assign(problems, {
  CUSTOMER_VERIFICATION_UNAVAILABLE:'ยังตรวจตัวตนลูกค้าไม่ได้ กรุณาตรวจหน้าต่างล็อกอิน',
  CUSTOMER_LOGIN_CLOSED:'หน้าต่างล็อกอินลูกค้าถูกปิดแล้ว รอคุณจัดการงานนี้',
  LOGIN_FORM_CHANGED:'รูปแบบหน้าล็อกอินเปลี่ยน กรุณาจัดการในหน้าต่างล็อกอิน',
- COMPLETION_PENDING:'กำลังรอผลคำสั่งสำเร็จเดิม ระบบจะไม่จบงานซ้ำ'
+ COMPLETION_PENDING:'กำลังรอผลคำสั่งสำเร็จเดิม ระบบจะไม่จบงานซ้ำ',
+ CUSTOMER_IDENTITY_VERIFICATION:'บัญชีลูกค้ารอการยืนยันตัวตน (รหัสทางอีเมล/พาสคีย์) กรุณาทำในหน้าต่างล็อกอิน',
+ CUSTOMER_LOGIN_RATE_LIMITED:'Roblox จำกัดการพยายามล็อกอิน กรุณารอแล้วลองเริ่มงานเดิมใหม่'
 });
 export function problemMessage(code){return problems[code] || problems.UNKNOWN_ERROR;}

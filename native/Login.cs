@@ -20,6 +20,15 @@ internal static partial class Host {
   Require(target.StartsWith(root,StringComparison.OrdinalIgnoreCase) && String.Equals(Path.GetDirectoryName(target),root.TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase) && System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(target),@"^[0-9a-f]{32}$"),"PROFILE_PATH_INVALID");
   if(Directory.Exists(target) && (File.GetAttributes(target)&FileAttributes.ReparsePoint)==0)Directory.Delete(target,true);
  }
+ // Login problems that never produced a customer session, so the user may ask
+ // for the same order to be prepared again after fixing the password or
+ // finishing a manual verification.
+ static readonly string[] RetryableLoginCodes={"LOGIN_FORM_TIMEOUT","LOGIN_FORM_CHANGED","LOGIN_SUBMIT_TIMEOUT","CUSTOMER_LOGIN_TIMEOUT","CUSTOMER_LOGIN_CLOSED","CUSTOMER_PASSWORD_INVALID","CUSTOMER_OTP_REQUIRED","CUSTOMER_PHONE_VERIFICATION","CUSTOMER_CAPTCHA_REQUIRED","CUSTOMER_IDENTITY_VERIFICATION","CUSTOMER_LOGIN_RATE_LIMITED"};
+ static bool RetryableLogin(string code){return Array.IndexOf(RetryableLoginCodes,code)>=0;}
+ static void NoteLoginView(string jobId,string gen,string code,string text){
+  if(String.IsNullOrEmpty(text))return;if(text.Length>300)text=text.Substring(0,300);
+  lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"state")!="blocked" || S(role,"code")!=code)return;role["loginView"]=text;Bump();Save();}
+ }
  static Func<string,Dictionary<string,object>> authenticate=Authenticated;
  static Func<string,Dictionary<string,object>> importSession=ImportSession;
  static Func<string,Dictionary<string,object>> persistedAccount=id=>FindAccount(ReadAccounts(),id);
@@ -36,7 +45,7 @@ internal static partial class Host {
  static void UpdateJobState(Dictionary<string,object> job){var customer=D(job["customer"]);var op=D(job["operator"]);var cg=D(customer.ContainsKey("game")?customer["game"]:null);var og=D(op.ContainsKey("game")?op["game"]:null);if(S(op,"state")=="blocked"){job["state"]="blocked";job["code"]=S(op,"code");}else if(S(customer,"state")=="blocked"){job["state"]="blocked";job["code"]=S(customer,"code");}else if(S(og,"state")=="blocked"||S(cg,"state")=="blocked"){job["state"]="blocked";job["code"]=S(og,"state")=="blocked"?S(og,"code"):S(cg,"code");}else if(S(op,"state")=="ready" && S(customer,"state")=="ready" && S(og,"state")=="connected" && S(cg,"state")=="connected"){job["state"]="ready";job.Remove("code");}else{job["state"]="preparing";job.Remove("code");}}
  static bool Current(string jobId,string gen){var j=D(ledger["current"]);return j!=null && S(j,"jobId")==jobId && S(j,"generation")==gen && S(D(j["customer"]),"state")!="ready";}
  static void CloseLogin(){var f=loginForm;if(f!=null && !f.IsDisposed && f.IsHandleCreated)try{f.BeginInvoke(new Action(()=>f.Close()));}catch{}}
- static void Block(string jobId,string gen,string code){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"state")=="blocked" && S(role,"code")==code)return;role["state"]="blocked";role["code"]=code;if(code=="LOGIN_FORM_TIMEOUT" && S(role,"submissionAttempted")!="True" && !job.ContainsKey("importIntent"))role["canResume"]=true;UpdateJobState(job);Bump();Save();}}
+ static void Block(string jobId,string gen,string code){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"state")=="blocked" && S(role,"code")==code)return;role["state"]="blocked";role["code"]=code;if(RetryableLogin(code) && !job.ContainsKey("importIntent"))role["canResume"]=true;else role["canResume"]=false;UpdateJobState(job);Bump();Save();}}
  static bool MarkSubmission(string jobId,string gen,bool attempted){lock(Gate){if(!Current(jobId,gen))return false;var role=D(D(ledger["current"])["customer"]);role["submissionAttempted"]=attempted;role["canResume"]=false;Bump();Save();return true;}}
  static void RunLogin(string jobId,string gen,string username,string password){
   string profile=Path.Combine(profilesRoot,NewId());Form owned=null;try{
@@ -53,8 +62,8 @@ internal static partial class Host {
       var cookies=await core.CookieManager.GetCookiesAsync("https://www.roblox.com/");var auth=cookies.FirstOrDefault(c=>c.Name==".ROBLOSECURITY" && !String.IsNullOrEmpty(c.Value));
       if(auth!=null && !busy && auth.Value!=lastCookie){busy=true;string cookie=auth.Value;lastCookie=cookie;await Task.Run(()=>FinishLogin(jobId,gen,username,cookie));busy=false;lock(Gate){if(!Current(jobId,gen))f.Close();}return;}
       if(!pageLoaded){if(!expired && DateTime.UtcNow>=deadline){expired=true;password=null;Block(jobId,gen,"LOGIN_FORM_TIMEOUT");}return;}
-      string issue=await core.ExecuteScriptAsync("(()=>{const t=(document.body?.innerText||'').toLowerCase();const visible=s=>Array.from(document.querySelectorAll(s)).some(e=>e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0);if(visible('iframe[src*=captcha],iframe[src*=arkoselabs],[data-testid*=captcha]')||/verify you are human|security challenge|ยืนยันว่าคุณเป็นมนุษย์/.test(t))return 'CUSTOMER_CAPTCHA_REQUIRED';if(/verify (using|with|on) (your )?(phone|mobile)|check your (phone|mobile)|approve (the )?(login|request)|โปรดเปิดแอป roblox|โทรศัพท์มือถือหรือแท็บเล็ตที่ลงชื่อเข้าใช้อยู่/.test(t))return 'CUSTOMER_PHONE_VERIFICATION';if(visible('input[autocomplete=one-time-code]')||/verification code|two.step verification|2.step verification|รหัสยืนยัน|การตรวจสอบยืนยันตัวตน 2 ขั้นตอน/.test(t))return 'CUSTOMER_OTP_REQUIRED';if(/incorrect (username or password|password)|invalid (username or password|password)|ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง|รหัสผ่านไม่ถูกต้อง/.test(t))return 'CUSTOMER_PASSWORD_INVALID';return '';})()");
-      string code=J.Deserialize<string>(issue);if(!String.IsNullOrEmpty(code)){Block(jobId,gen,code);}
+      string issue=await core.ExecuteScriptAsync(LoginFormScripts.Issue);
+      string code=J.Deserialize<string>(issue);if(!String.IsNullOrEmpty(code)){string view=null;try{view=J.Deserialize<string>(await core.ExecuteScriptAsync(LoginFormScripts.View(J.Serialize(username))));}catch{}Block(jobId,gen,code);NoteLoginView(jobId,gen,code,view);}
       if(submitted && !loginTimedOut && DateTime.UtcNow>=loginDeadline){loginTimedOut=true;Block(jobId,gen,"CUSTOMER_LOGIN_TIMEOUT");}
       Uri source;if(!submitted && !expired && String.IsNullOrEmpty(code) && Uri.TryCreate(core.Source,UriKind.Absolute,out source) && source.Host.Equals("www.roblox.com",StringComparison.OrdinalIgnoreCase) && source.AbsolutePath.StartsWith("/login",StringComparison.OrdinalIgnoreCase)){
        if(!filled){
