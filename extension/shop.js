@@ -112,7 +112,9 @@ export async function openAndReadOrder(order) {
   if (order.shopId !== 'bewpakorn.rdcw.xyz' || !/^[a-z0-9]{10,80}$/.test(order.orderId)) throw fault('ORDER_ID_INVALID');
   // Open even when credential validation fails: the user must be able to
   // inspect/fix this order while Success remains the only advance signal.
-  const tab = await chrome.tabs.create({url:`${SHOP_ORIGIN}/manager/orders/${order.orderId}/edit`,active:true});
+  // Open in the background: advancing the queue must not pull focus away from
+  // whatever the user is doing in the current tab.
+  const tab = await chrome.tabs.create({url:`${SHOP_ORIGIN}/manager/orders/${order.orderId}/edit`,active:false});
   const detail = await request('detail',order.orderId);
   const credentials = readCredentialForm(detail,order);
   return {tabId:tab.id,...credentials};
