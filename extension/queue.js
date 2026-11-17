@@ -22,16 +22,16 @@ export function operatorPool(item) {
 }
 export function validateCatalog(config) {
   if (!config || config.version !== 1 || config.shopOrigin !== SHOP_ORIGIN || !Array.isArray(config.catalog) || config.catalog.length > 2000) throw fault('CONFIG_INVALID');
-  const ids = new Set(), mapSettings = new Map();
+  if (config.protectedOperatorUserIds !== undefined && (!Array.isArray(config.protectedOperatorUserIds) || config.protectedOperatorUserIds.length > 2000 || config.protectedOperatorUserIds.some(id => !validUserId(id)) || new Set(config.protectedOperatorUserIds).size !== config.protectedOperatorUserIds.length)) throw fault('CONFIG_INVALID');
+  const ids = new Set();
   for (const p of config.catalog) {
     const map = MAPS.find(m => m.mapId === p.mapId);
-    if (!map || !validId(p.productId) || ids.has(p.productId) || p.placeId !== map.placeId || typeof p.productName !== 'string' || !p.productName.trim() || p.productName.length > 300 || (p.operatorUserId !== '' && !validUserId(p.operatorUserId))) throw fault('CONFIG_INVALID');
-    const pool = operatorPool(p);
+    if (!map || !validId(p.productId) || ids.has(p.productId) || p.placeId !== map.placeId || typeof p.productName !== 'string' || !p.productName.trim() || p.productName.length > 300) throw fault('CONFIG_INVALID');
+    // Older configurations still carry shop-account metadata. It is read only to
+    // keep those accounts out of the customer role; nothing rotates or launches.
+    if (p.operatorUserId !== undefined && p.operatorUserId !== '' && !validUserId(p.operatorUserId)) throw fault('CONFIG_INVALID');
+    if (p.operatorUserIds !== undefined) operatorPool(p);
     if (p.privateServerSourceUserId !== undefined && !validUserId(p.privateServerSourceUserId)) throw fault('CONFIG_INVALID');
-    if (p.operatorUserIds !== undefined && p.operatorUserId !== (pool[0] || '')) throw fault('CONFIG_INVALID');
-    const binding = JSON.stringify([pool, p.privateServerSourceUserId ?? p.operatorUserId]);
-    if (mapSettings.has(p.mapId) && mapSettings.get(p.mapId) !== binding) throw fault('CONFIG_INVALID');
-    mapSettings.set(p.mapId, binding);
     ids.add(p.productId);
   }
   return true;
@@ -81,7 +81,8 @@ export function normalizeOrder(row, catalog) {
 }
 
 export function readCredentialForm(detail, order) {
-  if (!detail || detail.id !== order.orderId || detail.variantId !== order.productId || detail.status !== 'PROCESSING' || detail.deletedAt !== null || parseCreatedAt(detail.createdAt) !== parseCreatedAt(order.createdAt) || !Array.isArray(detail.form)) throw fault('ORDER_CHANGED');
+  const loginAllowed = detail && (detail.status === 'PROCESSING' || (order.revisit === true && detail.status === 'COMPLETED'));
+  if (!detail || detail.id !== order.orderId || detail.variantId !== order.productId || !loginAllowed || detail.deletedAt !== null || parseCreatedAt(detail.createdAt) !== parseCreatedAt(order.createdAt) || !Array.isArray(detail.form)) throw fault('ORDER_CHANGED');
   const users = detail.form.filter(f => f.type === 'text' && f.placeholder === 'ID/ชื่อผู้ใช้' && f.required === true);
   const passes = detail.form.filter(f => (f.type === 'text' || f.type === 'password') && f.placeholder === 'รหัสผ่าน' && f.required === true);
   if (users.length !== 1 || passes.length !== 1 || typeof users[0].value !== 'string' || typeof passes[0].value !== 'string') throw fault('ORDER_FIELDS_INVALID');

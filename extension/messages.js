@@ -3,25 +3,8 @@ Object.assign(problems, {
  NATIVE_UPDATE_REQUIRED:'ตัวเชื่อมยังเป็นรุ่นเก่า กรุณาอัปเดตแล้ว Reload ส่วนขยาย',
  INVALID_OPERATOR_POOL:'รายชื่อบัญชีร้านไม่ถูกต้อง กรุณาตรวจการตั้งค่าแมพ',
  INVALID_PRIVATE_SOURCE:'ยังไม่ได้เลือกบัญชีที่เก็บ Private ของแมพนี้',
- CUSTOMER_SESSION_NOT_READY:'บัญชีลูกค้ายังไม่พร้อมเข้าเกม กรุณาจัดการล็อกอินก่อน',
+ CUSTOMER_SESSION_NOT_READY:'บัญชีลูกค้ายังไม่พร้อมใช้งานใน RAM กรุณาจัดการล็อกอินก่อน',
  CUSTOMER_SESSION_INVALID:'เซสชันลูกค้าใช้ไม่ได้ กรุณาตรวจบัญชี',
- PAIR_SESSIONS_NOT_READY:'ยังยืนยันเซสชันครบสองบัญชีไม่ได้',
- PAIR_UNOWNED_CLIENT_PRESENT:'มี Roblox ที่เปิดเองอยู่ กรุณาปิดเกมเดิมก่อนเริ่มโหมดสองหน้าต่าง',
- PAIR_MULTI_CLIENT_UNAVAILABLE:'โหมดหลายหน้าต่างของ RAM ยังไม่พร้อม กรุณาตรวจ Multi Roblox',
- PRIVATE_TARGET_MISSING:'ไม่พบ Private ที่ตั้งไว้สำหรับแมพนี้',
- PRIVATE_TARGET_MAP_MISMATCH:'Private ที่เลือกเป็นคนละแมพ กรุณาตรวจปลายทางในตั้งค่า',
- PRIVATE_TARGET_ACCESS_UNAVAILABLE:'ยังอ่านข้อมูลเข้า Private ไม่ได้ กรุณาตรวจลิงก์ใน RAM',
- PAIR_AUTHENTICATION_CHALLENGE:'Roblox ขอการยืนยันก่อนเปิดเกม กรุณาตรวจบัญชีนี้',
- PAIR_SESSION_INVALID:'เซสชันบัญชีสำหรับเข้าเกมใช้ไม่ได้',
- PAIR_CLIENT_EXITED:'มีเกมหนึ่งปิดไป จึงยังยืนยันสองหน้าต่างพร้อมกันไม่ได้',
- PAIR_NOT_SIMULTANEOUS:'ยังยืนยันว่าสองเกมเปิดพร้อมกันไม่ได้',
- PAIR_DIFFERENT_SERVER:'สองบัญชีเข้าคนละห้อง กรุณาตรวจ Private ที่เลือก',
- PAIR_CONNECTION_UNCONFIRMED:'เปิดเกมแล้วแต่ยังยืนยันการเชื่อมต่อไม่ได้',
- PAIR_SERVER_INSTANCE_UNCONFIRMED:'ยังยืนยันห้องของเกมไม่ได้',
- PAIR_LAUNCH_OWNERSHIP_UNCONFIRMED:'ยังระบุหน้าต่างเกมที่เพิ่งเปิดไม่ได้ ระบบหยุดเพื่อกันเปิดซ้ำ',
- PAIR_CLOSE_PENDING:'กำลังปิดสองหน้าต่างของงานเดิม ก่อนเปลี่ยนคิว',
- PAIR_CLEANUP_PENDING:'เกมของงานเดิมยังปิดไม่ครบ กำลังรอผล',
- PAIR_CLEANUP_UNCERTAIN:'ยังยืนยันการปิดเกมเดิมไม่ได้ กรุณาตรวจหน้าต่าง Roblox',
  LOGIN_SUBMIT_TIMEOUT:'กรอกข้อมูลแล้วแต่ปุ่ม Sign in ยังไม่พร้อม กรุณาตรวจหน้าต่างล็อกอิน',
  RAM_RECEIVER_UNAVAILABLE:'ยังเชื่อมต่อช่องนำเข้าไม่ได้ กรุณาเปิด Bewpakorn RAM และปลดล็อกโปรแกรม',
  RAM_RECEIVER_AMBIGUOUS:'พบ RAM หลายชุด กรุณาปิด Roblox Account Manager เดิมและเหลือ Bewpakorn RAM ชุดที่ตั้งค่าไว้',
@@ -39,6 +22,12 @@ Object.assign(problems, {
  LOGIN_FORM_CHANGED:'รูปแบบหน้าล็อกอินเปลี่ยน กรุณาจัดการในหน้าต่างล็อกอิน',
  COMPLETION_PENDING:'กำลังรอผลคำสั่งสำเร็จเดิม ระบบจะไม่จบงานซ้ำ',
  CUSTOMER_IDENTITY_VERIFICATION:'บัญชีลูกค้ารอการยืนยันตัวตน (รหัสทางอีเมล/พาสคีย์) กรุณาทำในหน้าต่างล็อกอิน',
- CUSTOMER_LOGIN_RATE_LIMITED:'Roblox จำกัดการพยายามล็อกอิน กรุณารอแล้วลองเริ่มงานเดิมใหม่'
+ CUSTOMER_LOGIN_RATE_LIMITED:'Roblox จำกัดการพยายามล็อกอิน กรุณารอแล้วลองเริ่มงานเดิมใหม่',
+ NOTHING_TO_UNDO:'ยังไม่มีออเดอร์ที่เพิ่งกดสำเร็จให้ย้อนกลับ',
+ ORDER_HISTORY_UNAVAILABLE:'ยังอ่านข้อมูลออเดอร์จากประวัติไม่ได้ กรุณาตรวจการเข้าสู่ระบบร้านแล้วลองอีกครั้ง',
+ CUSTOMER_LOGIN_UNAVAILABLE:'หน้าต่างล็อกอินลูกค้าขัดข้อง กรุณากดไอคอนเพื่อเริ่มงานนี้ใหม่'
 });
 export function problemMessage(code){return problems[code] || problems.UNKNOWN_ERROR;}
+
+Object.assign(problems,{STALE_JOB:"ออเดอร์หรือบัญชีเปลี่ยนแล้ว กรุณาเลือกอีกครั้ง",BUSY:"กำลังทำรายการ กรุณารอสักครู่",INVALID_SELECTION:"กรุณาเลือกบัญชีสำหรับงานนี้อีกครั้ง",RAM_ACCOUNT_NOT_FOUND:"ไม่พบบัญชีที่เลือกใน RAM",NAVIGATION_PENDING:"กำลังรอผลย้อนกลับเดิม"});
+Object.assign(problems,{OPERATOR_SESSION_INVALID:'เซสชันบัญชีที่เลือกใช้ไม่ได้ กรุณาล็อกอินบัญชีนี้ใหม่ใน RAM',OPERATOR_VALIDATION_UNAVAILABLE:'ยังตรวจเซสชันบัญชีที่เลือกไม่ได้ กรุณาตรวจการเชื่อมต่อ',RAM_VALIDATION_UNAVAILABLE:'ยังอ่านหรือตรวจบัญชีที่เลือกใน RAM ไม่ได้ กรุณาตรวจ RAM',STALE_HISTORY:'ประวัติออเดอร์เปลี่ยนแล้ว กรุณากดย้อนกลับใหม่',CUSTOMER_SOURCE_CHANGED:'บัญชีลูกค้าเปลี่ยนแล้ว กรุณาเลือกบัญชีอีกครั้ง',INVALID_ACCOUNT_SELECTION:'ข้อมูลบัญชีที่เลือกไม่ถูกต้อง กรุณาเลือกอีกครั้ง'});

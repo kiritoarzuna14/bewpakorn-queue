@@ -17,15 +17,16 @@ test('strict numeric unique bounded pool and private source validation',()=>{
   assert.equal(validateCatalog(config([pool])),true);
   for(const operatorUserIds of [['101','101'],[101],['0'],['01'],['1e3'],[' 101'],Array.from({length:21},(_,i)=>String(i+1)),null])assert.throws(()=>operatorPool({...product,operatorUserIds}),{code:'CONFIG_INVALID'});
   for(const privateServerSourceUserId of ['',102,'01','102x'])assert.throws(()=>validateCatalog(config([{...pool,privateServerSourceUserId}])),{code:'CONFIG_INVALID'});
-  assert.throws(()=>validateCatalog(config([{...pool,operatorUserId:'102'}])),{code:'CONFIG_INVALID'});
+  assert.equal(validateCatalog(config([{...pool,operatorUserId:'102'}])),true);
 });
 
-test('same-map products share exact ordered pool and destination; legacy remains valid',()=>{
-  const next={...pool,productId:'product00002'};
-  assert.equal(validateCatalog(config([pool,next])),true);
-  assert.equal(validateCatalog(config([product,{...product,productId:'product00002'}])),true);
-  for(const changed of [{...next,operatorUserIds:['101','103','102']},{...next,privateServerSourceUserId:'103'}])assert.throws(()=>validateCatalog(config([pool,changed])),{code:'CONFIG_INVALID'});
-  assert.equal(validateCatalog(config([{...product,operatorUserId:'',operatorUserIds:[]}])),true);
+test('same-map products no longer need a shared pool; legacy shapes stay readable',()=>{
+ const next={...pool,productId:'product00002'};
+ assert.equal(validateCatalog(config([pool,next])),true);
+ assert.equal(validateCatalog(config([product,{...product,productId:'product00002'}])),true);
+ assert.equal(validateCatalog(config([pool,{...next,operatorUserIds:['101','103','102'],privateServerSourceUserId:'103'}])),true);
+ assert.equal(validateCatalog(config([{...product,operatorUserId:'',operatorUserIds:[]}])),true);
+ assert.throws(()=>validateCatalog(config([{...product},{...product}])),{code:'CONFIG_INVALID'});
 });
 
 test('normalization preserves ordered rotation and shared private source; legacy shape remains compatible',()=>{

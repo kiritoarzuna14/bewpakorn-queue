@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {selectPending,parseCreatedAt,validateCatalog,normalizeOrder,readCredentialForm,MAPS,SHOP_ID,SHOP_ORIGIN} from '../extension/queue.js';
-import {scanOrders,discoverCatalog,shopReadInPage} from '../extension/shop.js';
+import {scanOrders,discoverCatalog,shopReadInPage,readOrderMetadata} from '../extension/shop.js';
 
 const p={productId:'product00001',productName:'Demo',mapId:'mm2',mapName:'Murder Mystery 2',placeId:'142823291',operatorUserId:'123'};
 const cfg={version:1,shopOrigin:SHOP_ORIGIN,catalog:[p]};
@@ -39,6 +39,23 @@ test('credential labels, exact current order/variant/time/status; never interpre
  assert.throws(()=>readCredentialForm({...d,variantId:'other000001'},order),{code:'ORDER_CHANGED'});
  assert.throws(()=>readCredentialForm({...d,form:[...d.form,d.form[0]]},order),{code:'ORDER_FIELDS_INVALID'});
 });
+
+test('only explicit Back can read a completed order; cancelled and refunded never login',()=>{
+ const d=detail(),order=normalizeOrder(raw(d.id),cfg.catalog);
+ assert.throws(()=>readCredentialForm({...d,status:'COMPLETED'},order),{code:'ORDER_CHANGED'});
+ assert.equal(readCredentialForm({...d,status:'COMPLETED'},{...order,revisit:true}).username,'demo_customer');
+ for(const status of ['FAILED','CANCELLED','REFUNDED'])assert.throws(()=>readCredentialForm({...d,status},{...order,revisit:true}),{code:'ORDER_CHANGED'});
+});
+
+test('legacy history recovers sanitized metadata with catalog fallback for a disabled map',async()=>{
+ const data={...detail(),customerUsername:'demo_customer',status:'COMPLETED'};
+ const rpc=async(kind,id)=>{assert.equal(kind,'metadata');assert.equal(id,data.id);return data;};
+ const restored=await readOrderMetadata(data.id,{...cfg,catalog:[]},rpc,async()=>[p]);
+ assert.equal(restored.revisit,true);assert.equal(restored.status,'COMPLETED');assert.equal(restored.mapId,'mm2');assert.equal(restored.customerUsername,'demo_customer');
+ assert.ok(!JSON.stringify(restored).includes('fake password'));assert.ok(!Object.hasOwn(restored,'form'));
+ await assert.rejects(readOrderMetadata(data.id,cfg,async()=>({...data,id:'other000001'})),{code:'ORDER_CHANGED'});
+ await assert.rejects(readOrderMetadata(data.id,{...cfg,catalog:[]},rpc,async()=>[]),{code:'PRODUCT_IDENTITY_CHANGED'});
+});
 test('multi-page coverage includes oldest page, final stable-head validation',async()=>{
  let calls=0;const first=Array.from({length:50},(_,i)=>raw(`order${String(i).padStart(6,'0')}`));
  const rpc=async(kind,input)=>{assert.equal(kind,'orders');assert.equal(input.sorting[0].desc,false);calls++;return input.cursor?{data:[raw('order000051')],nextCursor:null,countEstimate:51,countIsExact:true}:{data:first,nextCursor:'next',countEstimate:51,countIsExact:true};};
@@ -69,6 +86,7 @@ test('in-page RPC is GET only and projects out arbitrary notes and other form va
  globalThis.location={origin:SHOP_ORIGIN};
  const calls=[];globalThis.fetch=async(url,init)=>{calls.push({url,init});return {ok:true,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify([{result:{data:{json:detail()}}}])};};
  const reply=await shopReadInPage('detail','order000001');assert.equal(reply.ok,true);assert.equal(calls[0].init.method,'GET');assert.equal(reply.data.form[2].value,undefined);assert.ok(!JSON.stringify(reply).includes('untrusted instruction'));
- assert.equal((await shopReadInPage('editOrder',{})).code,'SHOP_REQUEST_INVALID');assert.equal(calls.length,1);
+ const metadata=await shopReadInPage('metadata','order000001');assert.equal(metadata.data.customerUsername,'demo_customer');assert.ok(!JSON.stringify(metadata).includes('fake password'));assert.ok(!JSON.stringify(metadata).includes('untrusted instruction'));assert.ok(!Object.hasOwn(metadata.data,'form'));
+ assert.equal((await shopReadInPage('editOrder',{})).code,'SHOP_REQUEST_INVALID');assert.equal(calls.length,2);
  delete globalThis.location;delete globalThis.fetch;
 });

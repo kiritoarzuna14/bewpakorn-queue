@@ -8,7 +8,7 @@ $out=[IO.Path]::GetFullPath($OutputDirectory)
 $release=Join-Path $out "BewpakornQueue-$version"
 New-Item -ItemType Directory -Force $out,$release,(Join-Path $release 'extension'),(Join-Path $release 'native\bin'),(Join-Path $release 'scripts'),(Join-Path $release 'docs') | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $release 'extension') -Force}
-Get-ChildItem -LiteralPath (Join-Path $root 'native\bin') -File | Where-Object {$_.Name -ne 'config.json' -and $_.Name -ne '.gitignore'} | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $release 'native\bin') -Force}
+foreach($file in @('BewpakornQueueHost.exe','Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll','WebView2-LICENSE.txt','WebView2-NOTICE.txt')){Copy-Item -LiteralPath (Join-Path $root "native\bin\$file") -Destination (Join-Path $release 'native\bin') -Force}
 foreach($name in @('install.ps1','uninstall.ps1','verify-installed.cjs')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $release 'scripts') -Force}
 Copy-Item -LiteralPath (Join-Path $root 'docs\extension-identity.json') -Destination (Join-Path $release 'docs') -Force
 Copy-Item -LiteralPath (Join-Path $root 'README-TH.md') -Destination $release -Force

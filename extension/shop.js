@@ -36,7 +36,7 @@ async function getReader() {
 // notes, images and tokens never leave the reader context.
 export async function shopReadInPage(kind, input) {
   if (location.origin !== 'https://bewpakorn.rdcw.xyz') return {ok:false,code:'SHOP_ORIGIN_INVALID'};
-  const paths = {orders:'manager.order.getOrdersServerTable', detail:'manager.order.getOrder', catalog:'public.category.getCategoryProducts'};
+  const paths = {orders:'manager.order.getOrdersServerTable', detail:'manager.order.getOrder', metadata:'manager.order.getOrder', catalog:'public.category.getCategoryProducts'};
   if (!paths[kind]) return {ok:false,code:'SHOP_REQUEST_INVALID'};
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
   try {
@@ -59,6 +59,12 @@ export async function shopReadInPage(kind, input) {
     if (kind === 'catalog') {
       if (!Array.isArray(d.items) || !Object.hasOwn(d,'nextCursor')) return {ok:false,code:'SHOP_API_CHANGED'};
       return {ok:true,data:{items:d.items.map(p=>({id:p.id,name:p.name,categoryId:p.categoryId,variants:Array.isArray(p.variants)?p.variants.map(v=>({id:v.id,name:v.name,type:v.type})):null})),nextCursor:d.nextCursor}};
+    }
+    if (kind === 'metadata') {
+      // History recovery never returns passwords, notes or the form itself.
+      const users = Array.isArray(d.form) ? d.form.filter(f => f.type === 'text' && f.placeholder === 'ID/ชื่อผู้ใช้' && f.required === true) : [];
+      const username = users.length === 1 && typeof users[0].value === 'string' ? users[0].value.trim() : '';
+      return {ok:true,data:{id:d.id,status:d.status,createdAt:d.createdAt,variantId:d.variantId,deletedAt:d.deletedAt,customerUsername:/^[A-Za-z0-9_]{3,20}$/.test(username)?username:''}};
     }
     // Details contain credentials. Only expected credential field values are
     // returned; all other customer-entered values are intentionally discarded.
@@ -135,6 +141,24 @@ export async function openAndReadOrder(order) {
   const detail = await request('detail',order.orderId);
   const credentials = readCredentialForm(detail,order);
   return {tabId,...credentials};
+}
+
+export async function readOrderMetadata(orderId, config, rpc=request, loadCatalog=defaultCatalog) {
+  if (!/^[a-z0-9]{10,80}$/.test(orderId)) throw fault('ORDER_ID_INVALID');
+  validateCatalog(config);
+  const d = await rpc('metadata', orderId);
+  if (!d || d.id !== orderId || d.deletedAt !== null || !['PROCESSING','COMPLETED','FAILED','CANCELLED','REFUNDED'].includes(d.status)) throw fault('ORDER_CHANGED');
+  // Back is explicit: an older order may belong to a map no longer selected.
+  let catalog = config.catalog;
+  if (!catalog.some(p => p.productId === d.variantId)) {
+    catalog = await loadCatalog();
+    validateCatalog({version:1,shopOrigin:SHOP_ORIGIN,catalog});
+  }
+  const p = catalog.find(p => p.productId === d.variantId);
+  if (!p) throw fault('PRODUCT_IDENTITY_CHANGED');
+  const map = MAPS.find(m => m.mapId === p.mapId);
+  const order = normalizeOrder({id:d.id,status:'PROCESSING',createdAt:d.createdAt,variant:{id:d.variantId,productGroup:{category:{id:map.categoryId}}}},catalog);
+  return {...order,status:d.status,revisit:true,customerUsername:typeof d.customerUsername === 'string' && /^[A-Za-z0-9_]{3,20}$/.test(d.customerUsername)?d.customerUsername:''};
 }
 
 export async function defaultCatalog() {

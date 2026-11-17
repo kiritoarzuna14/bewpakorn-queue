@@ -21,7 +21,7 @@ $nativeSource=Join-Path $packageRoot 'native\bin'
 foreach($file in @('BewpakornQueueHost.exe','Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')){
   if(!(Test-Path -LiteralPath (Join-Path $nativeSource $file))){throw "Missing release dependency: $file"}
 }
-Get-ChildItem -LiteralPath $nativeSource -File | Where-Object {$_.Name -ne 'config.json' -and $_.Name -ne '.gitignore'} | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $appDirectory -Force}
+foreach($file in @('BewpakornQueueHost.exe','Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll','WebView2-LICENSE.txt','WebView2-NOTICE.txt')){Copy-Item -LiteralPath (Join-Path $nativeSource $file) -Destination $appDirectory -Force}
 Get-ChildItem -LiteralPath (Join-Path $packageRoot 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $extensionDirectory -Force}
 $origin="chrome-extension://$($identity.extensionId)/"
 @{extensionOrigin=$origin;ramDirectory=$ramAbsolute;dataDirectory=$dataDirectory} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $appDirectory 'config.json') -Encoding UTF8

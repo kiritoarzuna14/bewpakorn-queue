@@ -10,14 +10,14 @@ test('Success during credential read cancels the old preparation without blockin
  try{
   for(const name of ['worker.js','native.js','notifications.js','messages.js','package.json'])await copyFile(new URL(`../../extension/${name}`,import.meta.url),join(folder,name));
   globalThis.__oldRead=new Promise(r=>{release=r;});
-  await writeFile(join(folder,'shop.js'),`export const defaultCatalog=async()=>[];export const discoverCatalog=async()=>[];export const scanOrders=async()=>[{shopId:'shop',orderId:'one'},{shopId:'shop',orderId:'two'}];export const openAndReadOrder=async o=>o.orderId==='one'?globalThis.__oldRead:{username:'second',password:'FAKE'};`);
+  await writeFile(join(folder,'shop.js'),`export const readOrderMetadata=async()=>({});export const defaultCatalog=async()=>[];export const discoverCatalog=async()=>[];export const scanOrders=async()=>[{shopId:'shop',orderId:'one'},{shopId:'shop',orderId:'two'}];export const openAndReadOrder=async o=>o.orderId==='one'?globalThis.__oldRead:{username:'second',password:'FAKE'};`);
   await writeFile(join(folder,'queue.js'),`export const operatorPool=p=>p.operatorUserIds||(p.operatorUserId?[p.operatorUserId]:[]);export const validateCatalog=()=>true;export const selectPending=(orders,done)=>orders.filter(o=>!done.some(h=>h.orderId===o.orderId));`);
   const local={config:{version:1,shopOrigin:'shop',catalog:[]}},calls=[],done=[];let current=null,revision=0;
   const message=event(),port={onMessage:event(),onDisconnect:event(),postMessage(m){calls.push(m);queueMicrotask(()=>{
    if(m.type==='CLAIM_ORDER'){current={jobId:m.payload.order.orderId,generation:1,completionToken:'token',order:m.payload.order,customer:{state:'waiting'},operator:{state:'ready'},state:'preparing'};revision++;}
    if(m.type==='COMPLETE_CURRENT'){done.push({orderId:current.order.orderId});current=null;revision++;}
    if(m.type==='PREPARE_CUSTOMER'){assert.equal(m.payload.jobId,'two');current.customer.state='ready';revision++;}
-   port.onMessage.emit(structuredClone({v:1,id:m.id,type:'RESULT',ok:true,payload:m.type==='GET_CAPABILITIES'?{dualClientLaunch:true,operatorPools:true}:{revision,current,handled:done}}));
+   port.onMessage.emit(structuredClone({v:1,id:m.id,type:'RESULT',ok:true,payload:m.type==='GET_CAPABILITIES'?{loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true}:{revision,current,handled:done}}));
   });}};
   globalThis.chrome={runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:message,sendMessage:async()=>{}},storage:{local:{get:async k=>({[k]:local[k]}),set:async obj=>Object.assign(local,obj),remove:async k=>{delete local[k];}}},notifications:{create:async()=>{}},action:{setBadgeText:async()=>{},onClicked:event()},sidePanel:{open:async()=>{}}};
   await import(pathToFileURL(join(folder,'worker.js')));await new Promise(r=>setTimeout(r,10));

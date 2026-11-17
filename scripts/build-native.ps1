@@ -12,7 +12,7 @@ try {
   Copy-Item "$extract\LICENSE.txt" (Join-Path $bin "WebView2-LICENSE.txt") -Force
   Copy-Item "$extract\NOTICE.txt" (Join-Path $bin "WebView2-NOTICE.txt") -Force
   $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-  & $csc /nologo /codepage:65001 /target:exe /platform:x64 /optimize+ /out:"$bin\BewpakornQueueHost.exe" /r:System.Web.Extensions.dll /r:System.Web.dll /r:System.Management.dll /r:System.Security.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:"$bin\Microsoft.Web.WebView2.Core.dll" /r:"$bin\Microsoft.Web.WebView2.WinForms.dll" "$root\native\Host.cs" "$root\native\Login.cs" "$root\native\LoginFormScripts.cs" "$root\native\Pools.cs" "$root\native\Launch.cs" "$root\native\LaunchTests.cs" "$root\native\SelfTests.cs"
+  & $csc /nologo /codepage:65001 /target:exe /platform:x64 /optimize+ /out:"$bin\BewpakornQueueHost.exe" /r:System.Web.Extensions.dll /r:System.Web.dll /r:System.Security.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:"$bin\Microsoft.Web.WebView2.Core.dll" /r:"$bin\Microsoft.Web.WebView2.WinForms.dll" "$root\native\Host.cs" "$root\native\Login.cs" "$root\native\LoginFormScripts.cs" "$root\native\Pools.cs" "$root\native\Accounts.cs" "$root\native\Navigation.cs" "$root\native\SelectionNavigationTests.cs" "$root\native\SelfTests.cs"
   if ($LASTEXITCODE -ne 0) { throw 'Native compilation failed' }
   & "$bin\BewpakornQueueHost.exe" --self-test
   if ($LASTEXITCODE -ne 0) { throw 'Native self-test failed' }

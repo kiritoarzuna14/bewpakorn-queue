@@ -1,3 +1,5 @@
+> Historical design. Superseded by login-only mode 1.3.0; production no longer launches or closes Roblox. See protocol.md and login-only-navigation-plan.md.
+
 # Native dual-client launcher
 
 Owned implementation: `native/Launch.cs`, `native/LaunchTests.cs`. Host, login, pool, build and extension integration belong to the root task. No live clients or authentication requests were started during implementation.

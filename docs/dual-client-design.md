@@ -1,3 +1,5 @@
+> Historical design. Superseded by login-only mode 1.3.0; production no longer launches or closes Roblox. See protocol.md and login-only-navigation-plan.md.
+
 # Dual Roblox clients and Cameraman pool — 1.1.0
 
 User request: prepare and enter gameplay with two concurrently running Roblox clients, one customer and one operator. Three operator accounts rotate automatically: BewFNTH1, BewFNTH2, BewFNTH3. The user selected automatic rotation explicitly. Keep FIFO by order time and the single Success advance button. No game trade/buy/status-writing behavior is added.
