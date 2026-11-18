@@ -1,39 +1,96 @@
 import {SHOP_ORIGIN, MAPS, validateCatalog, normalizeOrder, readCredentialForm, fault} from './queue.js';
 
-// All reads run in an owned same-origin reader tab, using the user's existing
-// shop session. We never refresh an editor tab or execute fetched page scripts.
-let readerId;
-let pendingReader;
+// Reads and explicit order navigation share one existing shop tab. GET requests
+// never refresh the page or touch its form. Serialize access so a simultaneous
+// scan/detail request cannot create another tab or run during our navigation.
+let shopTabId;
+let tabWork = Promise.resolve();
+const orderPath = /^\/manager\/orders(?:\/[a-z0-9]{10,80}(?:\/edit)?)?\/?$/;
+function allowedShopUrl(value) {
+  try {const url = new URL(value); return url.origin === SHOP_ORIGIN && !url.username && !url.password && orderPath.test(url.pathname);} catch {return false;}
+}
+function allowedShopTab(tab) {
+  return tab && Number.isInteger(tab.id) && allowedShopUrl(tab.pendingUrl || tab.url) && (!tab.url || allowedShopUrl(tab.url));
+}
+function changedShopTabCode(tab) {
+  if (allowedShopTab(tab)) return null;
+  try {
+    const url = new URL(tab?.pendingUrl || tab?.url);
+    if (url.origin !== SHOP_ORIGIN) return null;
+    return /(?:^|\/)(?:login|sign-?in|auth|authentication)(?:\/|$)/i.test(url.pathname) ? 'SHOP_LOGIN_REQUIRED' : 'SHOP_TAB_CHANGED';
+  } catch {return null;}
+}
+async function findTab(id) {
+  if (!Number.isInteger(id)) return null;
+  try {return await chrome.tabs.get(id);} catch (error) {
+    // Only a missing tab permits replacement. Other browser failures must not
+    // turn into duplicate editor tabs.
+    if (/no tab with id|invalid tab id|tab (?:was |has been )?closed|missing/i.test(error?.message || '')) return null;
+    throw fault('SHOP_READ_FAILED');
+  }
+}
 async function waitForTab(id) {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
-    const t = await chrome.tabs.get(id);
-    if (t.status === 'complete') {
-      if (!t.url || new URL(t.url).origin !== SHOP_ORIGIN) throw fault('SHOP_LOGIN_REQUIRED');
-      return t;
-    }
+    const tab = await findTab(id);
+    if (!tab) throw fault('SHOP_READ_FAILED');
+    if (!allowedShopTab(tab)) throw fault('SHOP_LOGIN_REQUIRED');
+    if (tab.status === 'complete') return tab;
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   throw fault('SHOP_LOAD_TIMEOUT');
 }
-async function getReader() {
-  if (pendingReader) return pendingReader;
-  pendingReader = (async () => {
-    if (readerId) { try { const t = await chrome.tabs.get(readerId); if (new URL(t.url).origin === SHOP_ORIGIN && new URL(t.url).pathname === '/manager/orders') return readerId; } catch {} }
-    const owned = await chrome.storage.session.get('shopReaderTabId');
-    if (owned.shopReaderTabId) { try { const t = await chrome.tabs.get(owned.shopReaderTabId); if (new URL(t.url).origin === SHOP_ORIGIN && new URL(t.url).pathname === '/manager/orders') {readerId = t.id; return readerId;} } catch {} }
-    const tab = await chrome.tabs.create({url: `${SHOP_ORIGIN}/manager/orders?ps=50`, active: false});
-    readerId = tab.id;
-    await chrome.storage.session.set({shopReaderTabId: readerId});
-    await waitForTab(readerId);
-    return readerId;
-  })();
-  try { return await pendingReader; } finally { pendingReader = null; }
+async function rememberTab(tab) {
+  shopTabId = tab.id;
+  // Local storage survives extension Reload; IDs are validated again on use
+  // because Chrome may assign different IDs after a browser restart.
+  await chrome.storage.local.set({shopTabId});
+  return waitForTab(shopTabId);
+}
+async function getShopTab() {
+  const remembered = await findTab(shopTabId);
+  if (allowedShopTab(remembered)) return waitForTab(remembered.id);
+  shopTabId = undefined;
+  const [saved, legacyEditor, legacyReader] = await Promise.all([
+    chrome.storage.local.get('shopTabId'),
+    chrome.storage.session.get('shopEditorTabId'),
+    chrome.storage.session.get('shopReaderTabId')
+  ]);
+  let windowId;
+  try {const win = await chrome.windows.getLastFocused({windowTypes:['normal']}); if (Number.isInteger(win?.id) && win.id >= 0) windowId = win.id;} catch {}
+  let tabs;
+  try {tabs = await chrome.tabs.query({url:`${SHOP_ORIGIN}/manager/orders*`});} catch {throw fault('SHOP_READ_FAILED');}
+  const savedIds = [saved.shopTabId, legacyEditor.shopEditorTabId, legacyReader.shopReaderTabId];
+  const previousTabs = [remembered,...await Promise.all([...new Set(savedIds.filter(Number.isInteger))].map(findTab))];
+  const rank = tab => {
+    const currentWindow = windowId !== undefined && tab.windowId === windowId;
+    const savedIndex = savedIds.indexOf(tab.id);
+    if (currentWindow && tab.active) return 0;
+    if (currentWindow) return savedIndex >= 0 ? 1 : 2;
+    return savedIndex >= 0 ? 3 + savedIndex : tab.active ? 6 : 7;
+  };
+  const candidates = tabs.filter(allowedShopTab).sort((a,b) => rank(a)-rank(b) || (b.lastAccessed || 0)-(a.lastAccessed || 0) || a.id-b.id);
+  for (const candidate of candidates) {
+    const tab = await findTab(candidate.id);
+    if (allowedShopTab(tab)) return rememberTab(tab);
+  }
+  // A shop login redirect or a page the user deliberately opened is still the
+  // remembered tab. Preserve it and stop; retrying must not spawn extra pages.
+  const changedCode = previousTabs.map(changedShopTabCode).find(Boolean);
+  if (changedCode) throw fault(changedCode);
+  const options = {url:`${SHOP_ORIGIN}/manager/orders?ps=50`,active:false};
+  if (windowId !== undefined) options.windowId = windowId;
+  return rememberTab(await chrome.tabs.create(options));
+}
+function withShopTab(work) {
+  const result = tabWork.then(async () => work(await getShopTab()));
+  tabWork = result.catch(() => {});
+  return result;
 }
 
 // Self-contained because Chrome serializes the function into an isolated world.
 // Fixed endpoint allowlist, GET only, strict projection: descriptions, customer
-// notes, images and tokens never leave the reader context.
+// notes, images and tokens never leave the shop page context.
 export async function shopReadInPage(kind, input) {
   if (location.origin !== 'https://bewpakorn.rdcw.xyz') return {ok:false,code:'SHOP_ORIGIN_INVALID'};
   const paths = {orders:'manager.order.getOrdersServerTable', detail:'manager.order.getOrder', metadata:'manager.order.getOrder', catalog:'public.category.getCategoryProducts'};
@@ -74,12 +131,14 @@ export async function shopReadInPage(kind, input) {
   finally {clearTimeout(timer);}
 }
 
-async function request(kind, input) {
-  const tabId = await getReader();
+async function requestInTab(tabId, kind, input) {
   let results;
   try {results = await chrome.scripting.executeScript({target:{tabId},func:shopReadInPage,args:[kind,input]});} catch {throw fault('SHOP_READ_FAILED');}
   if (results.length !== 1 || !results[0].result?.ok) throw fault(results[0]?.result?.code || 'SHOP_READ_FAILED');
   return results[0].result.data;
+}
+async function request(kind, input) {
+  return withShopTab(tab => requestInTab(tab.id,kind,input));
 }
 
 export async function scanOrders(config, rpc = request) {
@@ -114,33 +173,28 @@ export async function scanOrders(config, rpc = request) {
   throw fault('SCAN_INCOMPLETE');
 }
 
-// One owned editor tab is reused for every order and always stays in the
-// background window the user is already in, so advancing the queue never opens
-// or focuses a new tab.
-let editorId;
-async function getEditor(order) {
+async function navigateEditor(tab, order, canReplace = true) {
   const url = `${SHOP_ORIGIN}/manager/orders/${order.orderId}/edit`;
-  if (!editorId) {
-    const owned = await chrome.storage.session.get('shopEditorTabId');
-    if (owned.shopEditorTabId) { try { const t = await chrome.tabs.get(owned.shopEditorTabId); if (new URL(t.url).origin === SHOP_ORIGIN) editorId = t.id; } catch {} }
+  if (new URL(tab.url).pathname.replace(/\/$/,'') === new URL(url).pathname) return tab;
+  try {await chrome.tabs.update(tab.id,{url});} catch {
+    if (!canReplace || await findTab(tab.id)) throw fault('SHOP_READ_FAILED');
+    // It closed after acquisition. Rediscover before creating a replacement,
+    // and keep the replacement shared with all following reads.
+    shopTabId = undefined;
+    return navigateEditor(await getShopTab(),order,false);
   }
-  if (editorId) { try { await chrome.tabs.update(editorId, {url}); return editorId; } catch { editorId = undefined; } }
-  const options = {url, active: false};
-  try { const win = await chrome.windows.getLastFocused({windowTypes:['normal']}); if (win && Number.isInteger(win.id)) options.windowId = win.id; } catch {}
-  const tab = await chrome.tabs.create(options);
-  editorId = tab.id;
-  await chrome.storage.session.set({shopEditorTabId: editorId});
-  return editorId;
+  return waitForTab(tab.id);
 }
 
 export async function openAndReadOrder(order) {
   if (order.shopId !== 'bewpakorn.rdcw.xyz' || !/^[a-z0-9]{10,80}$/.test(order.orderId)) throw fault('ORDER_ID_INVALID');
   // Open even when credential validation fails: the user must be able to
   // inspect/fix this order while Success remains the only advance signal.
-  const tabId = await getEditor(order);
-  const detail = await request('detail',order.orderId);
-  const credentials = readCredentialForm(detail,order);
-  return {tabId,...credentials};
+  return withShopTab(async tab => {
+    const editor = await navigateEditor(tab,order);
+    const detail = await requestInTab(editor.id,'detail',order.orderId);
+    return {tabId:editor.id,...readCredentialForm(detail,order)};
+  });
 }
 
 export async function readOrderMetadata(orderId, config, rpc=request, loadCatalog=defaultCatalog) {

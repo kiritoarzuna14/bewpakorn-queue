@@ -25,3 +25,8 @@ test('live login wording maps to actionable codes', () => {
 test('an ordinary login page is not reported as a problem', () => {
   assert.equal(run('Charts Marketplace Create Robux Sign Up Sign in Username, email, or phone Password Forgot password or username?'), '');
 });
+
+test('the press-and-hold human check from the customer screenshot is reported for manual completion',()=>{
+ assert.equal(run("Verify you're human Hold the button to confirm you're human. Press and hold"),'CUSTOMER_CAPTCHA_REQUIRED');
+ assert.equal(run('Verify you’re human'),'CUSTOMER_CAPTCHA_REQUIRED');
+});

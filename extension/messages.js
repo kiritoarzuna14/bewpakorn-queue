@@ -15,6 +15,13 @@ Object.assign(problems, {
  SCAN_INCOMPLETE:'ยังอ่านคิวได้ไม่ครบ ระบบยังไม่เลือกออเดอร์',
  ORDER_CHANGED:'ออเดอร์เปลี่ยนหลังเลือก กรุณาตรวจหน้าแก้ไขออเดอร์',
  WEBVIEW_UNAVAILABLE:'เปิดหน้าล็อกอินแยกไม่ได้ กรุณาตรวจ Microsoft Edge WebView2',
+ CHROME_UNAVAILABLE:'ไม่พบ Google Chrome กรุณาติดตั้ง Chrome แล้วกดไอคอนเพื่อเริ่มงานนี้ใหม่',
+ CHROME_START_FAILED:'เปิดหน้าต่างล็อกอิน Chrome ไม่สำเร็จ กรุณาตรวจ Chrome แล้วกดไอคอนเพื่อเริ่มงานนี้ใหม่',
+ CHROME_DEBUG_UNAVAILABLE:'ยังเชื่อมต่อหน้าต่างล็อกอิน Chrome ไม่ได้ กรุณาตรวจหน้าต่าง Chrome แล้วเริ่มงานนี้ใหม่',
+ CHROME_SESSION_CLOSED:'หน้าต่างล็อกอิน Chrome ถูกปิด กรุณากดไอคอนเพื่อเริ่มงานนี้ใหม่',
+ CHROME_NAVIGATION_DENIED:'Chrome เปิดหน้านอกขั้นตอนล็อกอิน กรุณาตรวจหน้าต่าง Chrome แล้วเริ่มงานนี้ใหม่',
+ CHROME_SESSION_TRANSFER_FAILED:'ยังส่งเซสชันจาก Chrome ไป Queue ไม่สำเร็จ กรุณาตรวจหน้าต่างล็อกอินแล้วเริ่มงานนี้ใหม่',
+ CHROME_LOGIN_TIMEOUT:'ยังยืนยันการล็อกอินใน Chrome ไม่ได้ กรุณาจัดการการยืนยันด้วยตนเองใน Chrome แล้วเริ่มงานนี้ใหม่',
  RAM_DATABASE_LOCKED:'ไฟล์บัญชี RAM ถูกล็อกหรือใช้รูปแบบที่ยังอ่านไม่ได้ กรุณาตรวจ RAM',
  OPERATOR_VALIDATION_UNAVAILABLE:'ยังตรวจเซสชันบัญชีของคุณไม่ได้ กรุณาตรวจการเชื่อมต่อ',
  CUSTOMER_VERIFICATION_UNAVAILABLE:'ยังตรวจตัวตนลูกค้าไม่ได้ กรุณาตรวจหน้าต่างล็อกอิน',
@@ -31,3 +38,4 @@ export function problemMessage(code){return problems[code] || problems.UNKNOWN_E
 
 Object.assign(problems,{STALE_JOB:"ออเดอร์หรือบัญชีเปลี่ยนแล้ว กรุณาเลือกอีกครั้ง",BUSY:"กำลังทำรายการ กรุณารอสักครู่",INVALID_SELECTION:"กรุณาเลือกบัญชีสำหรับงานนี้อีกครั้ง",RAM_ACCOUNT_NOT_FOUND:"ไม่พบบัญชีที่เลือกใน RAM",NAVIGATION_PENDING:"กำลังรอผลย้อนกลับเดิม"});
 Object.assign(problems,{OPERATOR_SESSION_INVALID:'เซสชันบัญชีที่เลือกใช้ไม่ได้ กรุณาล็อกอินบัญชีนี้ใหม่ใน RAM',OPERATOR_VALIDATION_UNAVAILABLE:'ยังตรวจเซสชันบัญชีที่เลือกไม่ได้ กรุณาตรวจการเชื่อมต่อ',RAM_VALIDATION_UNAVAILABLE:'ยังอ่านหรือตรวจบัญชีที่เลือกใน RAM ไม่ได้ กรุณาตรวจ RAM',STALE_HISTORY:'ประวัติออเดอร์เปลี่ยนแล้ว กรุณากดย้อนกลับใหม่',CUSTOMER_SOURCE_CHANGED:'บัญชีลูกค้าเปลี่ยนแล้ว กรุณาเลือกบัญชีอีกครั้ง',INVALID_ACCOUNT_SELECTION:'ข้อมูลบัญชีที่เลือกไม่ถูกต้อง กรุณาเลือกอีกครั้ง'});
+Object.assign(problems,{SHOP_TAB_CHANGED:'แท็บตรวจสอบเดิมเปลี่ยนไปหน้าอื่น กรุณาเปิดหน้าออเดอร์ในแท็บนั้นแล้วกดไอคอนส่วนขยายอีกครั้ง',SHOP_LOAD_TIMEOUT:'หน้าออเดอร์ยังโหลดไม่เสร็จ กรุณาตรวจแท็บเดิมแล้วกดไอคอนส่วนขยายอีกครั้ง'});

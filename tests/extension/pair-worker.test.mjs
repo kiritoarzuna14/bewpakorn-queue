@@ -9,7 +9,7 @@ async function harness({oldNative=false}={}){
  const calls=[],storage={config:{version:1,catalog:[{operatorUserId:'11'}]}},handled=[];let current={jobId:'old',generation:1,completionToken:'token',order:{orderId:'old'},customer:{userId:'22',state:'ready'},operator:{state:'ready'},state:'ready'},revision=1,closeReady=false;
  const messages=event(),port={onMessage:event(),onDisconnect:event(),postMessage(m){calls.push(m);queueMicrotask(()=>{
   let payload,error;
-  if(m.type==='GET_CAPABILITIES')payload={loginOnly:!oldNative,accountSelection:!oldNative,undoLast:!oldNative,ramImportSupported:true};
+  if(m.type==='GET_CAPABILITIES')payload={loginOnly:!oldNative,accountSelection:!oldNative,undoLast:!oldNative,ramImportSupported:true,chromeFirstLogin:true};
   else{
    if(m.type==='COMPLETE_CURRENT'){
     if(!closeReady)error='RAM_IMPORT_UNCERTAIN';

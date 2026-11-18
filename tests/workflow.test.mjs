@@ -11,7 +11,7 @@ test('real worker + shop + queue: oldest first, background editor, RAM hand-off,
  const runtimeMessage=event(),action=event();
  const port={onMessage:event(),onDisconnect:event(),postMessage(m){nativeCalls.push(m);queueMicrotask(()=>{
   let payload;
-  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
+  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true,chromeFirstLogin:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
   else if(m.type==='GET_ACCOUNT_METADATA')payload={accounts:[{userId:'999',username:'customer_demo'}]};
   else if(m.type==='CLAIM_ORDER'){
    assert.deepEqual(m.payload.protectedOperatorUserIds?.slice().sort(),['123','456']);
@@ -35,7 +35,7 @@ test('real worker + shop + queue: oldest first, background editor, RAM hand-off,
   else throw Error('unexpected endpoint');
   return {ok:true,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify([{result:{data:{json}}}])};
  };
- globalThis.chrome={runtime:{id:'test',getURL:p=>`chrome-extension://test/${p}`,onMessage:runtimeMessage,sendMessage:async()=>{},connectNative:()=>port},storage:{local:storage(local),session:storage(session)},notifications:{create:async()=>{}},action:{onClicked:action,setBadgeText:async()=>{}},sidePanel:{open:async()=>{}},tabs:{create:async options=>{const tab={id:tabs.size+1,status:'complete',...options};tabs.set(tab.id,tab);return tab;},get:async id=>{if(!tabs.has(id))throw Error('missing');return tabs.get(id);},update:async(id,props)=>{const tab=tabs.get(id);Object.assign(tab,props);tab.status='complete';return tab;}},windows:{getLastFocused:async()=>({id:1})},scripting:{executeScript:async({func,args})=>[{result:await func(...args)}]}};
+ globalThis.chrome={runtime:{id:'test',getURL:p=>`chrome-extension://test/${p}`,onMessage:runtimeMessage,sendMessage:async()=>{},connectNative:()=>port},storage:{local:storage(local),session:storage(session)},notifications:{create:async()=>{}},action:{onClicked:action,setBadgeText:async()=>{}},sidePanel:{open:async()=>{}},tabs:{query:async()=>[...tabs.values()],create:async options=>{const tab={id:tabs.size+1,status:'complete',...options};tabs.set(tab.id,tab);return tab;},get:async id=>{if(!tabs.has(id))throw Error('missing');return tabs.get(id);},update:async(id,props)=>{const tab=tabs.get(id);Object.assign(tab,props);tab.status='complete';return tab;}},windows:{getLastFocused:async()=>({id:1})},scripting:{executeScript:async({func,args})=>[{result:await func(...args)}]}};
  try {
   await import('../extension/worker.js');await new Promise(r=>setTimeout(r,30));assert.deepEqual(nativeCalls.map(m=>m.type),['GET_SNAPSHOT']);assert.equal(httpCalls.length,0);
   const send=(type,payload)=>new Promise(resolve=>runtimeMessage.emit({type,payload},{id:'test',url:'chrome-extension://test/panel.html'},resolve));
@@ -43,6 +43,7 @@ test('real worker + shop + queue: oldest first, background editor, RAM hand-off,
   assert.ok([...tabs.values()].every(t=>t.active!==true));assert.ok([...tabs.values()].some(t=>t.url===`${origin}/manager/orders/order000001/edit`));
   const first=reply.payload.native.current;const identity={jobId:first.jobId,orderId:first.order.orderId,generation:first.generation,completionToken:first.completionToken};
   reply=await send('UI_COMPLETE',identity);assert.equal(reply.ok,true);assert.equal(reply.payload.native.current.order.orderId,'order000002');
+  assert.equal(tabs.size,1);assert.equal([...tabs.values()][0].url,`${origin}/manager/orders/order000002/edit`);
   assert.equal((await send('UI_COMPLETE',identity)).error.code,'STALE_JOB');
   assert.equal(nativeCalls.some(m=>m.type==='LAUNCH_PAIR'),false);
   const second=reply.payload.native.current;reply=await send('UI_COMPLETE',{jobId:second.jobId,orderId:second.order.orderId,generation:second.generation,completionToken:second.completionToken});assert.equal(reply.payload.phase,'empty');
