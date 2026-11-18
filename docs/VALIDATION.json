@@ -1,34 +1,34 @@
 {
-  "version": "1.3.0",
-  "date": "2026-11-17",
+  "version": "1.3.1",
+  "date": "2026-11-18",
   "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "61add9b983c025a129cb5eb17b8c3a614e1cf429",
+  "sourceCodeCommit": "fedd92b191ddf87eb71b298dcce3c073cbe619e1",
+  "mode": "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
+  "observedProblem": "Screenshot displays manual human verification while sanitized live state reported CUSTOMER_LOGIN_TIMEOUT; panel canResume hid concrete reason",
   "changes": [
-    "Login-only mode: automatic browser login and verified RAM import, manual game entry.",
-    "Both role cards have per-job account selectors; customer accepts order or saved RAM session, operator accepts saved RAM.",
-    "Durable Back with old-history metadata recovery, exact command replay and stale identity fences.",
-    "Own-account protection survives disabled maps and legacy Back."
+    "Recognize visible human/hold captions and unreadable visible-dialog fallback.",
+    "Pause automated preparation/submission and ordinary timeout during manual CAPTCHA/OTP/phone/identity verification.",
+    "Clear stale manual-wait flags after close/restart/resume/success; preserve unresolved import reason.",
+    "Unique visible controls, checked values before submit, bounded safe pre-submit reset repair.",
+    "At most3 safe identity GET retries before any POST; no import POST retry."
   ],
   "nodeTests": {
-    "failed": 0,
-    "passed": 42
+    "passed": 52,
+    "failed": 0
   },
-  "nativeBuild": "passed x64 .NET Framework build",
-  "nativeSelfTests": "passed: login identity/ACK/persistence/cancel, selector source and generation fences, role conflicts, exact replay, legacy/no-current Back, settled and unsettled import, global protected account identity",
-  "productionBinary": {
-    "containsGameLifecycleMethods": false,
-    "containsUndoLast": true,
-    "containsSelectAccount": true,
-    "launchSourcesIncluded": false
-  },
+  "nativeBuild": "passed x64 compile and full native self-tests",
+  "nativePolicyTests": "manual wait >90s, 10min reason retained, late manual completion fresh cookie wait, unknown submit no reclick, max3 fills, close/restart recovery, identity retry and import fences",
   "browserSmoke": {
-    "panel": "passed: both role dropdowns, order+RAM options, Back, mutation lock, stale pointer-start identity, no overflow",
-    "options": "passed: map selection, legacy mapping, disabled-map protection, no overflow",
-    "viewportWidth": 320
+    "panel": "passed320px with visible real problem and manual wait instructions",
+    "offlineLogin": "passed; zero network requests, no challenge interaction",
+    "publicWebView": "LOGIN_FORM_READY; readonly no credential fill/submission/cookie/RAM"
   },
+  "originalBrowserVerified": true,
+  "separateChromeFlow": false,
   "liveCustomerLoginTested": false,
+  "liveChallengeInteracted": false,
   "liveGameActionsPerformed": false,
-  "installation": "Staged 1.3.0 in both LOCALAPPDATA extension and actual loaded D:\\BewpakornQueue-1.0.0\\extension; production native manifest points to versions\\1.3.0. Hashes match build, extension key unchanged, live ledger SHA256 unchanged.",
-  "activation": "Chrome Reload required; existing running connection may remain on1.1.2 until Reload. No live customer login or game action performed.",
-  "preservedData": "installer does not modify ledger or encrypted RAM accounts"
+  "installation": "Staged1.3.1 in LOCALAPPDATA and actual loaded D:\\BewpakornQueue-1.0.0\\extension; native manifest points to versions\\1.3.1. Installed extension and native hashes verified; original Queue browser retained.",
+  "activation": "Reload required",
+  "preservedData": "Current ledger retained, no backup ledger restored, history172->172 with all prior entries present; encrypted RAM store not modified by staging."
 }
