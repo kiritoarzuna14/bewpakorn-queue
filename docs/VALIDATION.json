@@ -1,34 +1,60 @@
 {
-  "version": "1.3.0",
-  "date": "2026-11-17",
+  "version": "1.4.0",
+  "date": "2026-11-18",
   "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "61add9b983c025a129cb5eb17b8c3a614e1cf429",
+  "sourceCodeCommit": "214b07dd3eb1dfe7b962b53e54d693d77d7fec82",
   "changes": [
-    "Login-only mode: automatic browser login and verified RAM import, manual game entry.",
-    "Both role cards have per-job account selectors; customer accepts order or saved RAM session, operator accepts saved RAM.",
-    "Durable Back with old-history metadata recovery, exact command replay and stale identity fences.",
-    "Own-account protection survives disabled maps and legacy Back."
+    "One validated shop order tab for scan/detail/catalog and explicit Success/Back navigation, persisted/recovered across Reload.",
+    "Real isolated Chrome login first, then verified session transfer into Queue WebView2 and RAM without another password submission.",
+    "Visible/connected form resolution, hydration reset handling, atomic manual-edit protection and exact pre-submit field verification.",
+    "Bounded initial about:blank handling and owned-browser cleanup on native disconnect."
   ],
   "nodeTests": {
+    "singleTabRegressionTests": 11,
     "failed": 0,
-    "passed": 42
+    "passed": 62,
+    "singleTabRegressionsFailAgainstOldCode": true
   },
-  "nativeBuild": "passed x64 .NET Framework build",
-  "nativeSelfTests": "passed: login identity/ACK/persistence/cancel, selector source and generation fences, role conflicts, exact replay, legacy/no-current Back, settled and unsettled import, global protected account identity",
-  "productionBinary": {
-    "containsGameLifecycleMethods": false,
-    "containsUndoLast": true,
-    "containsSelectAccount": true,
-    "launchSourcesIncluded": false
-  },
+  "nativeBuild": "passed x64 .NET Framework compile and full self-tests",
   "browserSmoke": {
-    "panel": "passed: both role dropdowns, order+RAM options, Back, mutation lock, stale pointer-start identity, no overflow",
-    "options": "passed: map selection, legacy mapping, disabled-map protection, no overflow",
-    "viewportWidth": 320
+    "options": "passed 320px: map filters and protection retained",
+    "panel": "passed 320px: Chrome -> Queue -> RAM, manual verification stays blocked",
+    "login": "passed: local synthetic Chrome DOM, no account/network/RAM",
+    "publicChromeReadOnly": {
+      "passed": 3,
+      "ownedProfileDeleted": true,
+      "readyMilliseconds": [
+        4657,
+        3877,
+        5115
+      ],
+      "shutdownProbePassed": true,
+      "registryEmpty": true,
+      "ownedProcessExited": true,
+      "credentialsOrCookiesRead": false,
+      "initialBlankObserved": true
+    }
+  },
+  "queueSessionHandoffProbe": {
+    "httpOnly": true,
+    "sameSite": "None",
+    "secure": true,
+    "externalRequests": false,
+    "fixtureOnly": true,
+    "externalNavigation": false,
+    "profileDeleted": true,
+    "passed": true
+  },
+  "productionBinary": {
+    "webViewAvailable": true,
+    "gameAutomation": false,
+    "chromeAvailable": true,
+    "chromeFirstLogin": true
   },
   "liveCustomerLoginTested": false,
+  "liveRamImportTested": false,
   "liveGameActionsPerformed": false,
-  "installation": "Staged 1.3.0 in both LOCALAPPDATA extension and actual loaded D:\\BewpakornQueue-1.0.0\\extension; production native manifest points to versions\\1.3.0. Hashes match build, extension key unchanged, live ledger SHA256 unchanged.",
-  "activation": "Chrome Reload required; existing running connection may remain on1.1.2 until Reload. No live customer login or game action performed.",
-  "preservedData": "installer does not modify ledger or encrypted RAM accounts"
+  "installation": "Staged 1.4.0 in LOCALAPPDATA and actual loaded D:\\BewpakornQueue-1.0.0\\extension; native manifest points to versions\\1.4.0. Extension identity and all installed hashes verified.",
+  "activation": "Reload required; running native host remains1.3.0 until the existing extension connection closes.",
+  "preservedData": "Installer did not write the ledger/RAM store. User continued operating1.3.0 during staging: handled count142->143; every previous handled entry retained. Backup preserved."
 }
