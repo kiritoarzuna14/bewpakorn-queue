@@ -1,4 +1,4 @@
-import {problems} from './messages.js';
+import {problems,manualVerificationWaiting} from './messages.js';
 const $ = id => document.getElementById(id);
 const labels = {waiting:'รอเตรียม',preparing:'กำลังล็อกอิน',ready:'พร้อมใช้งานใน RAM',blocked:'ต้องตรวจสอบ'};
 let visible = null, locked = false, armedAt = 0, previous = '', latestState = null, savedAccounts = [];
@@ -33,7 +33,9 @@ function render(s) {
     $(`${role}-state`).textContent=labels[data?.state] || 'รอออเดอร์';selector(role,j,disabled);
   }
   const code=[s.issue,j?.code,j?.customer?.code,j?.operator?.code].find(c=>c && !legacyCode(c));
-  $('issue').hidden=!code;$('issue').textContent=j?.customer?.canResume?'ออเดอร์เดิมยังอยู่ กดไอคอนส่วนขยายเพื่อเตรียมงานนี้ต่อได้':code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : '';
+  const waitingForUser=j?.customer?.waitingForUser===true;
+  const issue=code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : !waitingForUser && j?.customer?.canResume ? 'ออเดอร์เดิมยังอยู่ กดไอคอนส่วนขยายเพื่อเตรียมงานนี้ต่อได้' : '';
+  $('issue').textContent=[issue,waitingForUser ? manualVerificationWaiting : ''].filter(Boolean).join(' ');$('issue').hidden=!$('issue').textContent;
   $('complete').disabled=!j || disabled || Date.now()<armedAt;
   $('undo').disabled=!(s.native?.canUndo ?? Boolean(target)) || disabled;
   $('undo').dataset.target=target?.orderId || '';

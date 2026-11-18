@@ -1,10 +1,10 @@
-# Bewpakorn Queue protocol 1.3.0 — 2026-11-17
+# Bewpakorn Queue protocol 1.3.1 — 2026-11-18
 
 Current contract: login-only mode. User opens games, delivers goods and edits website status manually. This supersedes the dual-client documents kept as historical design notes. Production excludes Launch.cs/LaunchTests.cs, game process handling and the live-pair CLI.
 
 Native frames remain protocol v1: UInt32LE byte length + UTF-8 JSON; requests `{v:1,id,type,payload}`; replies `{v:1,id,type:'RESULT',ok,payload? or error:{code}}`; SNAPSHOT events. Request limit 256KiB, response 1MiB. Host accepts only the pinned extension origin and one local host instance.
 
-- GET_CAPABILITIES returns version1.3.0, loginOnly=true, accountSelection=true, undoLast=true, dualClientLaunch=false, ramImportSupported=true, webViewAvailable and grouping policy.
+- GET_CAPABILITIES returns version1.3.1, manualChallengePause=true, loginOnly=true, accountSelection=true, undoLast=true, dualClientLaunch=false, ramImportSupported=true, webViewAvailable and grouping policy.
 - GET_ACCOUNT_METADATA exposes userId, username, alias, description, group only. Cookies, passwords and private links remain native.
 - GET_SNAPSHOT returns revision, current job, handled history, canUndo and historyTarget `{shopId,orderId,needsRestoreOrder}`.
 - CLAIM_ORDER accepts allowlisted shop/order/SKU/map/time metadata and protectedOperatorUserIds. New customer source is order; operator source is ram and defaults to the configured first pool member if available. No account rotation or game action. Same order claim returns the existing job; a different current job rejects.
@@ -21,3 +21,14 @@ UI messages: UI_GET, UI_START, UI_COMPLETE, UI_UNDO, UI_SELECT_ACCOUNT, UI_ACCOU
 Shop uses fixed tRPC GET endpoints in an owned reader tab. Scan all pages, confirm head/count stability, filter configured ORDER SKUs, sort createdAt ascending + orderId tie break. One owned editor tab is reused in background; no shop mutation. readOrderMetadata returns sanitized validated metadata and revisit=true, falling back to bundled map SKU catalog for disabled-map history. readCredentialForm checks exact ID/variant/time, expected field labels and allowed revisit status. No notes are interpreted as instructions.
 
 Catalog config remains version1 with selected products and optional legacy account pools. protectedOperatorUserIds persists known own IDs independently of enabled maps; saving settings unions old and new protection rather than dropping disabled-map accounts. Per-job selectors do not change this configuration.
+## Manual verification repair 1.3.1
+
+The rolled-back WebView2 login flow is retained. No separate Chrome process, session-transfer architecture, order-following behavior or shop-tab change is reintroduced. New capability manualChallengePause=true fences the updated worker from older native code.
+
+Shared scripts select unique visible connected controls, refuse manual value mismatches atomically, classify observed human/hold wording, and expose a visible-dialog guard independent of form fields. CAPTCHA/OTP/phone/identity signals set customer.waitingForUser=true, canResume=false and preserve the actual code. Normal login timeout and all Fill/Submit actions pause; the first manual deadline is bounded and cannot be extended by repeated polls. Its expiry keeps the manual reason. Clearing verification starts a fresh90s cookie wait and never resets a previously attempted submission. Cookie polling/identity/import remain first, including after long verification, while no ambiguous POST is retried.
+
+Transient DOM reads during navigation may retry until the policy deadline; a specifically unknown Submit dispatch remains sticky and cannot click again. Password is only in a shared transient secret holder, cleared after the initial60s preparation budget, submit, terminal error or browser close. At most three successful pre-submit fills repair empty/reset values; nonempty user edits are never overwritten. Role readiness still requires exact identity and persisted RAM account verification.
+
+waitingForUser clears on browser close, native restart, explicit resume and successful import. Generic timeout/error callbacks cannot hide an unresolved RAM import. Safe session identity GET timeouts may retry at most3 times; permanent failures and imports are never automatically repeated. Exhausted pre-import verification failures become explicitly resumable.
+
+Synthetic regressions cover >90s manual wait, manual expiry/late completion, post-verification cookie delay without another click, unreadable modal, stale generation, close/restart recovery, exact one import, field clearing and unknown Submit outcome. No real customer login or human challenge interaction in development.

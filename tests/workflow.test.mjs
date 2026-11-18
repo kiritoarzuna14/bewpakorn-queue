@@ -11,7 +11,7 @@ test('real worker + shop + queue: oldest first, background editor, RAM hand-off,
  const runtimeMessage=event(),action=event();
  const port={onMessage:event(),onDisconnect:event(),postMessage(m){nativeCalls.push(m);queueMicrotask(()=>{
   let payload;
-  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
+  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true,manualChallengePause:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
   else if(m.type==='GET_ACCOUNT_METADATA')payload={accounts:[{userId:'999',username:'customer_demo'}]};
   else if(m.type==='CLAIM_ORDER'){
    assert.deepEqual(m.payload.protectedOperatorUserIds?.slice().sort(),['123','456']);
