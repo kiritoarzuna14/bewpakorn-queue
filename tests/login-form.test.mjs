@@ -7,18 +7,34 @@ const source=await readFile(new URL('../native/LoginFormScripts.cs',import.meta.
 const scripts=Object.fromEntries([...source.matchAll(/const string (\w+)="((?:\\.|[^"\\])*)";/g)].map(m=>[m[1],JSON.parse(`"${m[2]}"`)]));
 const username='fixture_user',password='FIXTURE_PASSWORD';
 
-function fixture({legacy=false,sync=false,form=true,ambiguous=false}={}){
+function fixture({legacy=false,sync=false,form=true,ambiguous=false,noIds=false,dialog=false,enablesPassword=false}={}){
  const events=[];let clicks=0;
- const node=extra=>({isConnected:true,hidden:false,style:{display:'block',visibility:'visible'},getBoundingClientRect(){return {width:this.hidden?0:100,height:this.hidden?0:20};},getAttribute(){return null;},...extra});
- class Input{constructor(){Object.assign(this,node());}disabled=false;readOnly=false;_value='';get value(){return this._value;}set value(v){this._value=v;}dispatchEvent(e){events.push(e.type);if(sync&&u.value&&p.value)b.disabled=false;if(this.onEvent)this.onEvent(e);}}
- const u=new Input(),p=new Input(),b=node({type:'submit',textContent:'Sign in',innerText:'Sign in',disabled:true,click(){clicks++;}});
+ const node=(extra={},attrs={})=>({isConnected:true,hidden:false,style:{display:'block',visibility:'visible'},getBoundingClientRect(){return {width:this.hidden?0:100,height:this.hidden?0:20};},getAttribute(k){return k in attrs?attrs[k]:null;},...extra});
+ class Input{constructor(attrs={}){Object.assign(this,node({},attrs));this.type=attrs.type||'text';this.disabled=!!attrs.disabled;this.readOnly=false;this._value='';}
+  get value(){return this._value;}set value(v){this._value=v;}
+  dispatchEvent(e){events.push(e.type);if(sync&&u.value&&p.value)b.disabled=false;if(enablesPassword&&this===u&&u.value)p.disabled=false;if(this.onEvent)this.onEvent(e);}}
+ const u=new Input({placeholder:'Username, email, or phone'}),p=new Input({type:'password',disabled:enablesPassword});
+ const b=node({type:dialog?'button':'submit',textContent:dialog?'Log In':'Sign in',innerText:dialog?'Log In':'Sign in',disabled:sync||dialog?false:true,click(){clicks++;}});
  const search=node({type:'submit',textContent:'',disabled:false,click(){throw Error('search must not be clicked');}});
- const controls={user:[u],password:[p],legacy:legacy?[b]:[],form:[b],buttons:[search,b,...(ambiguous?[node({...b})]:[])],modals:[],captchas:[]};
+ const otp=node({type:'button',textContent:'Email Me a One-Time Code',innerText:'Email Me a One-Time Code',disabled:false,click(){throw Error('one-time code must not be clicked');}});
+ const modal=dialog?node({role:'dialog',innerText:'Login to Roblox',querySelectorAll:()=>[b],contains:e=>[u,p,b].includes(e)}):null;
+ const controls={user:[u],password:[p],legacy:legacy?[b]:[],form:[b],buttons:dialog?[search,otp,b]:[search,b,...(ambiguous?[node({...b})]:[])],modals:modal?[modal]:[],captchas:[]};
  if(form)p.form={querySelectorAll:()=>controls.form};
- const document={body:{innerText:''},querySelector:s=>document.querySelectorAll(s)[0]||null,querySelectorAll:s=>s==='#login-username'?controls.user:s==='#login-password'?controls.password:s==='#login-button'?controls.legacy:s==='button'?controls.buttons:s==='[role=dialog],[aria-modal=true]'?controls.modals:s.includes('iframe')?controls.captchas.concat(s.includes('[role=dialog]')?controls.modals:[]):s.includes('button')?controls.modals.concat(controls.buttons):[]};
+ const document={body:{innerText:''},querySelector:s=>document.querySelectorAll(s)[0]||null,querySelectorAll:s=>{
+  if(s==='#login-username')return noIds?[]:controls.user;
+  if(s==='#login-password')return noIds?[]:controls.password;
+  if(s==='#login-button')return controls.legacy;
+  if(s==='input')return controls.user.concat(controls.password);
+  if(s==='input[type=password]')return controls.password;
+  if(s==='button')return controls.buttons;
+  if(s.startsWith('[role=dialog]'))return controls.modals;
+  if(s.includes('iframe'))return controls.captchas;
+  if(s.includes('button'))return controls.modals.concat(controls.buttons);
+  return [];
+ }};
  const context={document,HTMLInputElement:Input,Event:class{constructor(type){this.type=type;}},getComputedStyle:e=>e.style};
- const run=(body,args=false)=>vm.runInNewContext(args?`((username,password)=>{${scripts.Resolver}${body}})`:`(()=>{${scripts.Resolver}${body}})()`,context);
- return {b,p,u,events,controls,document,node,get clicks(){return clicks;},ready:()=>run(scripts.ReadyBody),fill:()=>run(scripts.FillBody,true)(username,password),check:()=>run(scripts.CheckFilledBody,true)(username,password),submit:()=>run(scripts.SubmitBody,true)(username,password),challenge:()=>controls.modals.push(node({innerText:'Verify you are human'}))};
+ const run=(body,args=false)=>args?vm.runInNewContext(`((username,password)=>{${scripts.Resolver}${body}})`,context):vm.runInNewContext(`(()=>{${scripts.Resolver}${body}})()`,context);
+ return {b,p,u,events,controls,document,node,get clicks(){return clicks;},ready:()=>run(scripts.ReadyBody),readyUser:()=>run(scripts.ReadyUserBody),readyPassword:()=>run(scripts.ReadyPasswordBody,true)(username),fill:()=>run(scripts.FillBody,true)(username,password),fillUser:()=>run(scripts.FillUserBody,true)(username),fillPassword:()=>run(scripts.FillPasswordBody,true)(username,password),stage:()=>run(scripts.StageBody,true)(username,password),check:()=>run(scripts.CheckFilledBody,true)(username,password),submit:()=>run(scripts.SubmitBody,true)(username,password),challenge:()=>controls.modals.push(node({innerText:'Verify you are human'}))};
 }
 
 test('empty legacy and modern forms are fillable while Sign in is disabled',()=>{
@@ -27,7 +43,7 @@ test('empty legacy and modern forms are fillable while Sign in is disabled',()=>
 
 test('fill dispatches input/change without clicking; delayed button can then submit',()=>{
  const f=fixture();assert.equal(f.fill(),true);assert.equal(f.clicks,0);assert.deepEqual(f.events,['input','change','input','change']);
- assert.equal(f.check(),'MATCHED');assert.equal(f.submit(),'PENDING');assert.equal(f.clicks,0);f.b.disabled=false;assert.equal(f.submit(),'CLICKED');assert.equal(f.clicks,1);
+ assert.equal(f.check(),'MATCHED');assert.equal(f.submit(),'PENDING');assert.equal(f.clicks,0);f.b.disabled=false;assert.equal(f.check(),'MATCHED');assert.equal(f.submit(),'CLICKED');assert.equal(f.clicks,1);
 });
 
 test('synchronous enabling and semantic fallback work without legacy ID',()=>{
@@ -35,7 +51,7 @@ test('synchronous enabling and semantic fallback work without legacy ID',()=>{
 });
 
 test('fill checks both existing values before changing either input',()=>{
- for(const field of ['u','p']){const f=fixture();f[field].value='different_fixture_value';assert.equal(f.fill(),false);assert.equal(f[field==='u'?'p':'u'].value,'');assert.deepEqual(f.events,[]);assert.equal(f.check(),'MISMATCH');assert.equal(f.submit(),'MISMATCH');assert.equal(f.clicks,0);}
+ for(const field of ['u','p']){const f=fixture();f[field].value='different_fixture_value';assert.equal(f.fill(),false);assert.equal(f[field==='u'?'p':'u'].value,'');assert.deepEqual(f.events,[]);}
 });
 
 test('checked submit rejects a cleared or changed field without returning credentials',()=>{
@@ -49,7 +65,7 @@ test('hidden and disconnected duplicate controls are ignored',()=>{
 });
 
 test('multiple visible candidates fail closed, including legacy and same-form buttons',()=>{
- for(const key of ['user','password','legacy','form']){const f=fixture({legacy:key==='legacy',sync:true});f.controls[key].push(f.node({...f[key==='user'?'u':key==='password'?'p':'b']}));assert.equal(f.ready(),false,key);assert.equal(f.fill(),false,key);assert.equal(f.check(),'MISSING',key);assert.equal(f.submit(),'MISSING',key);assert.equal(f.clicks,0,key);}
+ for(const key of ['user','password','legacy','form']){const f=fixture({legacy:key==='legacy'||key==='form',sync:true});f.controls[key].push(f.node({...f[key==='user'?'u':key==='password'?'p':'b']}));assert.equal(f.ready(),false,key);assert.equal(f.fill(),false,key);assert.equal(f.submit(),'MISSING',key);assert.equal(f.clicks,0,key);}
  assert.equal(fixture({form:false,ambiguous:true}).ready(),false);
 });
 
@@ -62,11 +78,24 @@ test('hidden challenge does not block a visible usable form',()=>{
 });
 
 test('a reactive page clearing a filled value cannot receive a submit click',()=>{
- const f=fixture({sync:true});f.p.onEvent=()=>{f.p.value='';};assert.equal(f.fill(),true);assert.equal(f.check(),'EMPTY');assert.equal(f.submit(),'EMPTY');assert.equal(f.clicks,0);
+ const f=fixture({sync:true});f.p.onEvent=()=>{f.p.value='';};assert.equal(f.fill(),true);assert.equal(f.submit(),'EMPTY');assert.equal(f.clicks,0);
 });
 
-test('ChallengeVisible is independent of form fields and does not label generic dialogs as CAPTCHA',()=>{
+test('ChallengeVisible is independent of form fields and does not label a login dialog as a challenge',()=>{
  const f=fixture();const shown=()=>new Function('document','getComputedStyle',scripts.ChallengeVisibleBody)(f.document,e=>e.style);
  assert.equal(shown(),false);f.controls.modals.push(f.node({innerText:'Continue'}));assert.equal(shown(),true);f.controls.user=[];f.controls.password=[];assert.equal(shown(),true);assert.equal(new Function('document','getComputedStyle',scripts.IssueBody)(f.document,e=>e.style),'');f.controls.modals[0].hidden=true;assert.equal(shown(),false);
+ const dialog=fixture({dialog:true});const dialogShown=()=>new Function('document','getComputedStyle',scripts.ChallengeVisibleBody)(dialog.document,e=>e.style);
+ assert.equal(dialogShown(),false,'a dialog hosting the password field is the login form');
  assert.match(source,/static string ChallengeVisible/);
+});
+
+test('the dialog layout fills the left field first, then the right, then submits',()=>{
+ const f=fixture({dialog:true,noIds:true,enablesPassword:true});
+ assert.equal(f.p.disabled,true);
+ assert.equal(f.stage(),'USER');assert.equal(f.ready(),false);
+ assert.equal(f.fillUser(),true);assert.equal(f.p.disabled,false);assert.equal(f.clicks,0);
+ assert.equal(f.stage(),'PASSWORD');assert.equal(f.readyPassword(),true);
+ assert.equal(f.fillPassword(),true);assert.equal(f.clicks,0);
+ assert.equal(f.stage(),'READY');assert.equal(f.submit(),'CLICKED');assert.equal(f.clicks,1);
+ assert.equal(f.events.length,4);
 });

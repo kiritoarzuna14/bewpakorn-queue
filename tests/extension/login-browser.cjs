@@ -30,6 +30,15 @@ const form=({legacy=false,disabled=true}={})=>`<form onsubmit="event.preventDefa
   for(const html of ['<iframe title="ordinary page" src="about:blank"></iframe>','<div class="grecaptcha-badge"><iframe title="captcha badge" src="about:blank#captcha"></iframe></div>','<div hidden role="dialog">Continue</div>']){await page.setContent(html);assert.equal(await run('IssueBody'),'');assert.equal(await run('ChallengeVisibleBody'),false);}
   for(const attributes of ['src="about:blank#captcha"','src="about:blank#arkose"','title="captcha"','title="challenge"']){await page.setContent(`<iframe ${attributes}></iframe>`);assert.equal(await run('IssueBody'),'CUSTOMER_CAPTCHA_REQUIRED');assert.equal(await run('ChallengeVisibleBody'),true);}
   await page.setContent(form({disabled:false}));await page.evaluate(()=>document.querySelector('#login-password').addEventListener('input',e=>e.target.value=''));assert.equal(await fill(),true);assert.equal(await check(),'EMPTY');assert.equal(await submit(),'EMPTY');assert.equal(await page.evaluate(()=>window.clicks),0);
+  // Dialog layout: the password stays disabled until the username is committed.
+  const dialogHtml='<div role="dialog" aria-modal="true"><h1>Login to Roblox</h1><input placeholder="Username, email, or phone" autocomplete="username"><input type="password" autocomplete="current-password" disabled><button type="button">Log In</button><button type="button">Email Me a One-Time Code</button></div><script>window.clicks=0;window.events=[];const u=document.querySelector(\'input:not([type=password])\');const p=document.querySelector(\'input[type=password]\');document.querySelectorAll(\'button\').forEach(b=>b.addEventListener(\'click\',()=>window.clicks++));u.addEventListener(\'input\',()=>{if(u.value)p.disabled=false;});for(const e of [u,p])for(const type of [\'input\',\'change\'])e.addEventListener(type,()=>window.events.push(type));</script>';
+  await page.setContent(dialogHtml);
+  assert.equal(await run('ReadyBody'),false);assert.equal(await run('ChallengeVisibleBody'),false);assert.equal(await run('IssueBody'),'');
+  assert.equal(await run('ReadyUserBody'),true);assert.equal(await run('FillUserBody',[credentials[0]]),true);
+  assert.equal(await page.evaluate(()=>document.querySelector('input[type=password]').disabled),false);
+  assert.equal(await run('ReadyPasswordBody',[credentials[0]]),true);assert.equal(await run('FillPasswordBody',credentials),true);
+  assert.equal(await run('StageBody',credentials),'READY');assert.equal(await run('SubmitBody',credentials),'CLICKED');
+  assert.equal(await page.evaluate(()=>window.clicks),1);assert.equal(await page.evaluate(()=>window.events.length),4);
   assert.equal(networkRequests,0);console.log('Local offline login fixture passed: legacy + modern forms, exact fill/submit guard, hidden/duplicate controls, reactive clearing, visible manual CAPTCHA classification; zero network requests and no challenge interaction.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

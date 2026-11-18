@@ -62,7 +62,7 @@ internal static partial class Host {
      lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}var env=await CoreWebView2Environment.CreateAsync(null,profile);await browser.EnsureCoreWebView2Async(env);var core=browser.CoreWebView2;core.Settings.IsPasswordAutosaveEnabled=false;core.Settings.IsGeneralAutofillEnabled=false;core.Settings.AreDevToolsEnabled=false;
      core.NewWindowRequested+=(s,e)=>{e.Handled=true;};
      core.NavigationStarting+=(s,e)=>{Uri u;if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out u)||u.Scheme!="https"||!(u.Host.Equals("roblox.com",StringComparison.OrdinalIgnoreCase)||u.Host.EndsWith(".roblox.com",StringComparison.OrdinalIgnoreCase)))e.Cancel=true;};
-     var progress=new LoginProgress(DateTime.UtcNow);bool filled=false,checking=false,expired=false,dispatchPending=false;string lastCookie=null;
+     var progress=new LoginProgress(DateTime.UtcNow);bool checking=false,expired=false,dispatchPending=false;string lastCookie=null;
      Func<Task> check=async ()=>{if(checking)return;checking=true;try{
       lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}
       if(DateTime.UtcNow>=progress.FormDeadline)secret.Clear();
@@ -80,23 +80,23 @@ internal static partial class Host {
       // DOM readiness, not full resource loading, controls preparation. The
       // shared scripts check visible controls and the exact values atomically.
       Uri source;if(expired||secret.Value==null||!progress.CanAutomate(DateTime.UtcNow)||!Uri.TryCreate(core.Source,UriKind.Absolute,out source)||!IsLoginPage(source))return;
-      string script=LoginFormScripts.CheckFilled(J.Serialize(username),J.Serialize(secret.Value));string status;try{status=J.Deserialize<string>(await core.ExecuteScriptAsync(script));}finally{script=null;}
-      if(status=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");return;}
-      if(status=="MISMATCH"){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
-      if(status=="MISSING")return;
-      if(status=="EMPTY"){
-       filled=false;if(await core.ExecuteScriptAsync(LoginFormScripts.Ready)!="true")return;
+      // The dialog layout fills left then right: the password field stays
+      // disabled until the username is committed, so one field per tick.
+      string script=LoginFormScripts.Stage(J.Serialize(username),J.Serialize(secret.Value));string stage;try{stage=J.Deserialize<string>(await core.ExecuteScriptAsync(script));}finally{script=null;}
+      if(stage=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");return;}
+      if(stage=="MISMATCH"){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
+      if(stage=="USER"||stage=="PASSWORD"){
        lock(Gate){if(!Current(jobId,gen))return;}
        if(progress.Fills>=3){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
-       script=LoginFormScripts.Fill(J.Serialize(username),J.Serialize(secret.Value));try{if(await core.ExecuteScriptAsync(script)=="true"){progress.RecordFill();filled=true;}}finally{script=null;}return;
+       script=stage=="USER"?LoginFormScripts.FillUser(J.Serialize(username)):LoginFormScripts.FillPassword(J.Serialize(username),J.Serialize(secret.Value));
+       try{if(await core.ExecuteScriptAsync(script)=="true")progress.RecordFill();}finally{script=null;}return;
       }
-      if(status!="MATCHED"){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
-      if(!filled){filled=true;return;} // Require a later tick after preparation.
+      if(stage!="READY")return;
       lock(Gate){if(!Current(jobId,gen))return;}
       if(!progress.BeginSubmission(DateTime.UtcNow)||!MarkSubmission(jobId,gen,true))return;
       string result=null;script=LoginFormScripts.SubmitChecked(J.Serialize(username),J.Serialize(secret.Value));
       dispatchPending=true;try{result=J.Deserialize<string>(await core.ExecuteScriptAsync(script));dispatchPending=false;}finally{script=null;if(result==null)secret.Clear();}
-      if(progress.ProveNoClick(result)){MarkSubmission(jobId,gen,false);if(result=="EMPTY"||result=="MISSING")filled=false;if(result=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");}}
+      if(progress.ProveNoClick(result)){MarkSubmission(jobId,gen,false);if(result=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");}}
       else if(result=="CLICKED")secret.Clear();
       else{expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");}
      }catch{if(dispatchPending){dispatchPending=false;secret.Clear();expired=true;Block(jobId,gen,"LOGIN_FORM_CHANGED");}else{string timeout=progress.Timeout(DateTime.UtcNow);if(timeout!=""){secret.Clear();expired=true;if(LoginProgress.Manual(timeout)&&progress.WaitingForUser)WaitForManual(jobId,gen,timeout);else Block(jobId,gen,timeout);}}}finally{checking=false;}};
