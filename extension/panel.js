@@ -1,7 +1,6 @@
 import {problems} from './messages.js';
 const $ = id => document.getElementById(id);
 const labels = {waiting:'รอเตรียม',preparing:'กำลังล็อกอิน',ready:'พร้อมใช้งานใน RAM',blocked:'ต้องตรวจสอบ'};
-const loginPhases = {chrome:'กำลังล็อกอินใน Chrome',queue:'Chrome ผ่านแล้ว · กำลังตรวจใน Queue',ram:'กำลังนำเข้าบัญชีไป RAM'};
 let visible = null, locked = false, armedAt = 0, previous = '', latestState = null, savedAccounts = [];
 const selectionIdentity = {};
 const send = (type,payload) => chrome.runtime.sendMessage({type,payload});
@@ -31,12 +30,10 @@ function render(s) {
   const disabled=locked || s.completionPending || s.mutationPending || s.connection!=='connected';
   for(const role of ['customer','operator']) {
     const data=j?.[role];$(`${role}-name`).textContent=data?.username || (role==='customer'?j?.order.customerUsername:'') || '—';
-    $(`${role}-state`).textContent=role==='customer' && data?.state==='preparing' ? loginPhases[data.loginPhase] || labels.preparing : labels[data?.state] || 'รอออเดอร์';selector(role,j,disabled);
+    $(`${role}-state`).textContent=labels[data?.state] || 'รอออเดอร์';selector(role,j,disabled);
   }
   const code=[s.issue,j?.code,j?.customer?.code,j?.operator?.code].find(c=>c && !legacyCode(c));
-  const issue=code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : '';
-  const resume=j?.customer?.canResume ? 'ออเดอร์เดิมยังอยู่ กดไอคอนส่วนขยายเพื่อเตรียมงานนี้ต่อได้' : '';
-  $('issue').hidden=!issue && !resume;$('issue').textContent=[issue,resume].filter(Boolean).join(' · ');
+  $('issue').hidden=!code;$('issue').textContent=j?.customer?.canResume?'ออเดอร์เดิมยังอยู่ กดไอคอนส่วนขยายเพื่อเตรียมงานนี้ต่อได้':code ? `${problems[code] || 'งานนี้ต้องตรวจสอบ'} (${code})` : '';
   $('complete').disabled=!j || disabled || Date.now()<armedAt;
   $('undo').disabled=!(s.native?.canUndo ?? Boolean(target)) || disabled;
   $('undo').dataset.target=target?.orderId || '';

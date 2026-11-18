@@ -30,24 +30,7 @@ const http=require('http'),fs=require('fs'),path=require('path'),assert=require(
   assert.equal(await page.evaluate(()=>window.requests[3].payload.jobId),'j');assert.equal(await page.evaluate(()=>window.requests[3].payload.completionToken),'changed');await page.evaluate(()=>window.resolveMutation());await page.waitForTimeout(100);
   await page.evaluate(()=>{window.state.native.current.customer.code='PAIR_CLOSE_PENDING';window.state.native.current.code='PAIR_CLOSE_PENDING';window.emitState();});assert.equal(await page.locator('#issue').isHidden(),true);
   await page.evaluate(()=>{window.state.native.canUndo=false;window.state.native.historyTarget=null;window.emitState();});assert.equal(await page.locator('#undo').isDisabled(),true);assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
-  await page.evaluate(()=>{const job=window.state.native.current;job.state='preparing';job.code=null;job.customer.state='preparing';job.customer.code=null;job.customer.loginPhase='chrome';window.emitState();});
-  assert.equal(await page.locator('#customer-state').textContent(),'กำลังล็อกอินใน Chrome');assert.equal(await page.locator('#issue').isHidden(),true);
-  assert.match(await page.locator('.roles .card').first().locator('.hint').textContent(),/Chrome → ตรวจใน Queue → เข้า Bewpakorn RAM/);
-  assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
-  await page.evaluate(()=>{window.state.native.current.customer.loginPhase='queue';window.emitState();});
-  assert.equal(await page.locator('#customer-state').textContent(),'Chrome ผ่านแล้ว · กำลังตรวจใน Queue');assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
-  await page.evaluate(()=>{window.state.native.current.customer.loginPhase='ram';window.emitState();});assert.equal(await page.locator('#customer-state').textContent(),'กำลังนำเข้าบัญชีไป RAM');
-  await page.evaluate(()=>{window.state.native.current.customer.state='ready';window.emitState();});assert.equal(await page.locator('#customer-state').textContent(),'พร้อมใช้งานใน RAM');
-  for(const phase of ['chrome','queue']) {
-   await page.evaluate(phase=>{const job=window.state.native.current;job.state='blocked';job.customer.state='blocked';job.customer.loginPhase=phase;job.customer.code='CUSTOMER_CAPTCHA_REQUIRED';job.customer.canResume=true;window.emitState();},phase);
-   assert.equal(await page.locator('#customer-state').textContent(),'ต้องตรวจสอบ');assert.match(await page.locator('#issue').textContent(),/CAPTCHA.*กรุณาจัดการเองในหน้าต่างล็อกอิน/);assert.match(await page.locator('#issue').textContent(),/ออเดอร์เดิมยังอยู่/);assert.doesNotMatch(await page.locator('#customer-state').textContent(),/พร้อมใช้งาน|Chrome ผ่านแล้ว/);
-  }
-  for(const code of ['CHROME_UNAVAILABLE','CHROME_START_FAILED','CHROME_DEBUG_UNAVAILABLE','CHROME_SESSION_CLOSED','CHROME_NAVIGATION_DENIED','CHROME_SESSION_TRANSFER_FAILED','CHROME_LOGIN_TIMEOUT']) {
-   await page.evaluate(code=>{window.state.native.current.customer.loginPhase='chrome';window.state.native.current.customer.code=code;window.emitState();},code);
-   assert.match(await page.locator('#issue').textContent(),/Chrome/);assert.match(await page.locator('#issue').textContent(),/กรุณา/);assert.doesNotMatch(await page.locator('#issue').textContent(),/งานนี้ต้องตรวจสอบ|พร้อมใช้งาน|Chrome ผ่านแล้ว/);assert.equal(await page.locator('#customer-state').textContent(),'ต้องตรวจสอบ');
-  }
-  assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
   await page.screenshot({path:path.resolve(__dirname,'../../docs/login-only-panel-320.png'),fullPage:true});
-  console.log('320px synthetic panel: labeled account selectors, identity-bound mutations, Chrome → Queue → RAM phase hints, manual verification stays blocked, actionable Chrome errors, no horizontal overflow');
+  console.log('320px synthetic panel: both labeled account selectors, order + RAM options, identity-bound selection and Back, all controls locked during mutations, legacy game codes hidden, no horizontal overflow');
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

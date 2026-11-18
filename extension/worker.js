@@ -41,7 +41,7 @@ function snapshot(value) {
   broadcast();
 }
 const native = new NativeClient(chrome, snapshot, () => { state.connection = 'disconnected';state.capabilities=null; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); });
-async function requireCapability(){if(!state.capabilities)state.capabilities=await native.request('GET_CAPABILITIES');if(state.capabilities.chromeFirstLogin!==true||state.capabilities.loginOnly!==true||state.capabilities.accountSelection!==true||state.capabilities.undoLast!==true||state.capabilities.ramImportSupported!==true)throw new Error('NATIVE_UPDATE_REQUIRED');}
+async function requireCapability(){if(!state.capabilities)state.capabilities=await native.request('GET_CAPABILITIES');if(state.capabilities.loginOnly!==true||state.capabilities.accountSelection!==true||state.capabilities.undoLast!==true||state.capabilities.ramImportSupported!==true)throw new Error('NATIVE_UPDATE_REQUIRED');}
 async function config() {
   const stored = await chrome.storage.local.get('config');
   const value = stored.config || {version:1, shopOrigin:'https://bewpakorn.rdcw.xyz', catalog:await defaultCatalog()};
@@ -107,7 +107,7 @@ async function prepareCurrent(job) {
 async function start() {
   if (busy || starting || state.mutationPending) throw new Error('BUSY');
   starting = true;
-  try { await sync();await requireCapability();const job=state.native?.current;if(!job)await next();else if(job.customer?.state==="waiting" && job.customer?.source!=="ram")await prepareCurrent(job);else if(job.customer?.canResume){const resumed=await native.request('RESUME_UNSUBMITTED',{jobId:job.jobId,generation:job.generation});snapshot(resumed);if(state.native?.current)await prepareCurrent(state.native.current);} }
+  try { await sync();await requireCapability();const job=state.native?.current;if(!job)await next();else if(job.customer?.canResume){const resumed=await native.request('RESUME_UNSUBMITTED',{jobId:job.jobId,generation:job.generation});snapshot(resumed);if(state.native?.current)await prepareCurrent(state.native.current);} }
   finally { starting = false; }
 }
 async function executeMutation(intent) {
