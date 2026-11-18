@@ -1,39 +1,39 @@
-{
-  "version": "1.3.2",
-  "date": "2026-11-18",
-  "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "pending release commit",
-  "mode": "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
-  "observedProblem": "The live Sign in page can render its form inside a role=dialog card ('Login to Roblox' with 'Log In'), and the password field can stay disabled until the username is committed. The host treated every dialog as a human challenge and only filled both fields at once, so orders alternated between working and stopping at LOGIN_FORM_TIMEOUT / CUSTOMER_IDENTITY_VERIFICATION.",
-  "changes": [
-    "A dialog that contains the password field is treated as the login form, not as a challenge; only dialogs without the login fields (or captcha frames) pause the job.",
-    "Fields are located by id when present and otherwise by autocomplete/name/placeholder, so the dialog layout without #login-username is still filled.",
-    "The submit control is resolved by exact label (Sign in / Log In / เข้าสู่ระบบ) inside the login dialog or form, and still fails closed when more than one candidate is visible.",
-    "Login is filled left then right: username first, then the password once it becomes editable, then submit; a password that never enables reports LOGIN_SUBMIT_TIMEOUT instead of silently waiting."
-  ],
-  "nodeTests": {
-    "passed": 53,
-    "failed": 0,
-    "newCases": "dialog layout without ids, password disabled until username, dialog not classified as challenge, left-then-right staged fill, duplicate-id fail-closed"
-  },
-  "nativeBuild": "passed x64 compile and full native self-tests",
-  "browserSmoke": {
-    "offlineLogin": "passed in real Chrome on synthetic markup for both the full page and the dialog layout; zero network requests",
-    "panel": "unchanged from 1.3.1"
-  },
-  "livePublicProbe": {
-    "account": "none (random nonexistent username, dummy password)",
-    "page": "https://www.roblox.com/login (new variant with 'Email a code', 'QR code', 'Other sign-in options')",
-    "result": "ready=true, stage=READY, submit=CLICKED, challengeVisible=false, detected=CUSTOMER_PASSWORD_INVALID",
-    "stored": "no credentials written to disk; probe profile deleted"
-  },
-  "liveCustomerLoginTested": false,
-  "liveChallengeInteracted": false,
-  "installation": "Staged 1.3.2 in LOCALAPPDATA and in the path Chrome actually loads (D:\\BewpakornQueue-1.0.0\\extension); previous live files kept in extension-backup-before-1.3.2. Extension and installed native host hashes verified, 15 files each.",
-  "activation": "Reload required in chrome://extensions",
-  "preservedData": "Current ledger retained; no history or RAM data modified by staging.",
-  "limitations": [
-    "The exact dialog variant from the screenshot could not be forced on the live site; it is covered by the synthetic browser fixture using the same markup and behaviour.",
-    "No real customer credential was used in development."
-  ]
+﻿{
+    "version":  "1.3.2",
+    "date":  "2026-11-18",
+    "timezone":  "Asia/Bangkok",
+    "sourceCodeCommit":  "3901355d9c70f71e1bed866a49ab07579148378a",
+    "mode":  "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
+    "observedProblem":  "The live Sign in page can render its form inside a role=dialog card (\u0027Login to Roblox\u0027 with \u0027Log In\u0027), and the password field can stay disabled until the username is committed. The host treated every dialog as a human challenge and only filled both fields at once, so orders alternated between working and stopping at LOGIN_FORM_TIMEOUT / CUSTOMER_IDENTITY_VERIFICATION.",
+    "changes":  [
+                    "A dialog that contains the password field is treated as the login form, not as a challenge; only dialogs without the login fields (or captcha frames) pause the job.",
+                    "Fields are located by id when present and otherwise by autocomplete/name/placeholder, so the dialog layout without #login-username is still filled.",
+                    "The submit control is resolved by exact label (Sign in / Log In / เน€เธเนเธฒเธชเธนเนเธฃเธฐเธเธ) inside the login dialog or form, and still fails closed when more than one candidate is visible.",
+                    "Login is filled left then right: username first, then the password once it becomes editable, then submit; a password that never enables reports LOGIN_SUBMIT_TIMEOUT instead of silently waiting."
+                ],
+    "nodeTests":  {
+                      "passed":  53,
+                      "failed":  0,
+                      "newCases":  "dialog layout without ids, password disabled until username, dialog not classified as challenge, left-then-right staged fill, duplicate-id fail-closed"
+                  },
+    "nativeBuild":  "passed x64 compile and full native self-tests",
+    "browserSmoke":  {
+                         "offlineLogin":  "passed in real Chrome on synthetic markup for both the full page and the dialog layout; zero network requests",
+                         "panel":  "unchanged from 1.3.1"
+                     },
+    "livePublicProbe":  {
+                            "account":  "none (random nonexistent username, dummy password)",
+                            "page":  "https://www.roblox.com/login (new variant with \u0027Email a code\u0027, \u0027QR code\u0027, \u0027Other sign-in options\u0027)",
+                            "result":  "ready=true, stage=READY, submit=CLICKED, challengeVisible=false, detected=CUSTOMER_PASSWORD_INVALID",
+                            "stored":  "no credentials written to disk; probe profile deleted"
+                        },
+    "liveCustomerLoginTested":  false,
+    "liveChallengeInteracted":  false,
+    "installation":  "Staged 1.3.2 in LOCALAPPDATA and in the path Chrome actually loads (D:\\BewpakornQueue-1.0.0\\extension); previous live files kept in extension-backup-before-1.3.2. Extension and installed native host hashes verified, 15 files each.",
+    "activation":  "Reload required in chrome://extensions",
+    "preservedData":  "Current ledger retained; no history or RAM data modified by staging.",
+    "limitations":  [
+                        "The exact dialog variant from the screenshot could not be forced on the live site; it is covered by the synthetic browser fixture using the same markup and behaviour.",
+                        "No real customer credential was used in development."
+                    ]
 }
