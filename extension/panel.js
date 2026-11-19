@@ -71,7 +71,7 @@ function render(s) {
   const cust = j?.customer;
   const showBrowserTools = Boolean(j && cust?.source !== 'ram' && cust?.state === 'preparing' && cust?.loginMode === 'browser');
   $('browser-tools').hidden = !showBrowserTools;
-  for (const id of ['open-roblox', 'copy-user', 'copy-pass', 'check-login']) {
+  for (const id of ['auto-fill', 'open-roblox', 'copy-user', 'copy-pass', 'check-login']) {
     $(id).disabled = disabled || !showBrowserTools;
   }
 
@@ -172,9 +172,10 @@ async function copyField(field, buttonId, defaultLabel) {
   }
 }
 
+$('auto-fill').addEventListener('click', () => { if (!locked) mutate('UI_AUTO_FILL_LOGIN', {}); });
 $('open-roblox').addEventListener('click', () => { send('UI_OPEN_ROBLOX_LOGIN').catch(() => {}); });
-$('copy-user').addEventListener('click', () => { copyField('username', 'copy-user', 'คัดลอกชื่อผู้ใช้'); });
-$('copy-pass').addEventListener('click', () => { copyField('password', 'copy-pass', 'คัดลอกรหัสผ่าน'); });
+$('copy-user').addEventListener('click', () => { copyField('username', 'copy-user', 'คัดลอกชื่อ'); });
+$('copy-pass').addEventListener('click', () => { copyField('password', 'copy-pass', 'คัดลอกรหัส'); });
 $('check-login').addEventListener('click', () => { if (!locked) mutate('UI_CHECK_BROWSER_LOGIN', {}); });
 $('clear-cookie').addEventListener('click', () => { if (!locked) mutate('UI_CLEAR_ROBLOX_COOKIE', {}); });
 $('launch-game').addEventListener('click', () => { if (!locked && visible) mutate('UI_LAUNCH_GAME', {jobId: visible.jobId, generation: visible.generation, mode: 'auto'}); });

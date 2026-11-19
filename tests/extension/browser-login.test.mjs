@@ -35,6 +35,7 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
     const calls = [];
     const broadcasts = [];
     const tabs = new Map();
+    const scriptCalls = [];
     let nextTabId = 10;
     let activeCookie = null;
     const removedCookies = [];
@@ -112,12 +113,20 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
       action: {setBadgeText: async () => {}, onClicked: event()},
       sidePanel: {open: async () => {}},
       tabs: {
-        create: async opts => { const t = {id: nextTabId++, windowId: 1, active: Boolean(opts.active), url: opts.url}; tabs.set(t.id, t); return t; },
+        create: async opts => { const t = {id: nextTabId++, windowId: 1, active: Boolean(opts.active), url: opts.url, status: 'complete'}; tabs.set(t.id, t); return t; },
         get: async id => { if (!tabs.has(id)) throw Error('missing'); return tabs.get(id); },
         query: async () => [...tabs.values()],
-        update: async (id, patch) => { const t = tabs.get(id); Object.assign(t, patch); return t; }
+        update: async (id, patch) => { const t = tabs.get(id); Object.assign(t, patch, {status: 'complete'}); return t; }
       },
       windows: {update: async () => {}},
+      scripting: {
+        executeScript: async ({target, func, args}) => {
+          scriptCalls.push({tabId: target.tabId, name: func.name, args: [...(args || [])]});
+          if (func.name === 'fillRobloxLoginInPage') return [{result: 'FILLED'}];
+          if (func.name === 'submitRobloxLoginInPage') return [{result: 'CLICKED'}];
+          return [{result: null}];
+        }
+      },
       cookies: {
         onChanged: cookieChanged,
         get: async () => activeCookie ? structuredClone(activeCookie) : null,
@@ -130,7 +139,7 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
     await new Promise(r => setTimeout(r, 20));
     const send = (type, payload) => new Promise(resolve => messages.emit({type, payload}, {id: 'test', url: 'chrome-extension://test/panel.html'}, resolve));
 
-    // 1. Start order -> enters browser login mode and opens https://www.roblox.com/login
+    // 1. Start order -> enters browser login mode, opens https://www.roblox.com/login, and auto-fills + clicks Sign In once
     const started = await send('UI_START');
     assert.equal(started.ok, true);
     assert.equal(started.payload.native.current.customer.loginMode, 'browser');
@@ -138,6 +147,8 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
     const loginTab = [...tabs.values()][0];
     assert.equal(loginTab.url, 'https://www.roblox.com/login');
     assert.equal(loginTab.active, true);
+    assert.deepEqual(scriptCalls.map(s => s.name), ['fillRobloxLoginInPage', 'submitRobloxLoginInPage']);
+    assert.deepEqual(scriptCalls[0].args, ['cust_demo', 'TOP_SECRET_PW']);
     // Password must never leak into broadcasts or storage
     assert.equal(JSON.stringify(broadcasts).includes('TOP_SECRET_PW'), false);
     assert.equal(JSON.stringify(storage).includes('TOP_SECRET_PW'), false);
@@ -156,11 +167,12 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
     assert.equal(afterWrong.payload.browserNotice?.actualUsername, 'other_user');
     assert.equal(removedCookies.length, 0);
 
-    // 4. User clicks Clear Chrome Cookie -> removes cookie & clears notice
+    // 4. User clicks Clear Chrome Cookie -> removes cookie, clears notice, and auto-fills again cleanly
     const cleared = await send('UI_CLEAR_ROBLOX_COOKIE');
     assert.equal(cleared.ok, true);
     assert.equal(removedCookies.length, 1);
     assert.equal(cleared.payload.browserNotice, null);
+    assert.equal(scriptCalls.filter(s => s.name === 'submitRobloxLoginInPage').length, 2);
 
     // 5. User signs into the matching customer account in Chrome -> imports, auto-launches game, clears Chrome cookie, resets tab to /login
     loginTab.url = 'https://www.roblox.com/home';

@@ -34,6 +34,8 @@ let cookieCheckQueued = false;
 let cookieDebounceTimer = null;
 let ramSyncTimer = null;
 let rejectedCookieKey = '';
+let autoSubmittedKey = '';
+let autoFillInFlight = false;
 
 const notifyOnce = createNotifier(chrome);
 const allowedCode = value => typeof value === 'string' && /^[A-Z0-9_]{1,80}$/.test(value) ? value : 'UNKNOWN_ERROR';
@@ -97,6 +99,126 @@ async function openRobloxLoginTab({focus = true, navigate = true} = {}) {
   const created = await chrome.tabs.create({url: ROBLOX_LOGIN_URL, active: focus});
   robloxLoginTabId = created?.id ?? null;
   return robloxLoginTabId;
+}
+
+// Self-contained functions injected strictly into https://www.roblox.com/login.
+// Never bypasses, clicks, or interacts with any CAPTCHA/human-verification modal.
+function fillRobloxLoginInPage(username, password) {
+  if (location.origin !== 'https://www.roblox.com' || !location.pathname.toLowerCase().startsWith('/login')) return 'NOT_LOGIN_PAGE';
+  const visible = sel => Array.from(document.querySelectorAll(sel)).some(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+  if (visible('[role="dialog"],[aria-modal="true"],iframe[src*="captcha"],iframe[src*="arkoselabs"],[data-testid*="captcha"]')) return 'CHALLENGE';
+  const u = document.querySelector('#login-username');
+  const p = document.querySelector('#login-password');
+  const legacy = document.querySelector('#login-button');
+  const formButtons = p?.form ? Array.from(p.form.querySelectorAll('button[type="submit"]')) : [];
+  const named = Array.from(document.querySelectorAll('button')).filter(e => e.type === 'submit' && /^(sign in|log in|เข้าสู่ระบบ|ลงชื่อเข้าใช้)$/i.test((e.textContent || '').trim()));
+  const b = legacy || (formButtons.length === 1 ? formButtons[0] : named.length === 1 ? named[0] : null);
+  if (!u || !p || !b || u.disabled || p.disabled || u.readOnly || p.readOnly) return 'NOT_READY';
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (!setter) return 'NOT_READY';
+  const setReactInput = (el, val) => {
+    el.focus();
+    const prev = el.value;
+    setter.call(el, val);
+    if (el._valueTracker) el._valueTracker.setValue(prev);
+    el.dispatchEvent(new Event('input', {bubbles: true}));
+    el.dispatchEvent(new Event('change', {bubbles: true}));
+  };
+  setReactInput(u, username);
+  setReactInput(p, password);
+  return (u.value === username && p.value === password) ? 'FILLED' : 'FILL_MISMATCH';
+}
+
+function submitRobloxLoginInPage(expectedUsername, expectedPassword) {
+  if (location.origin !== 'https://www.roblox.com' || !location.pathname.toLowerCase().startsWith('/login')) return 'NOT_LOGIN_PAGE';
+  const visible = sel => Array.from(document.querySelectorAll(sel)).some(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+  if (visible('[role="dialog"],[aria-modal="true"],iframe[src*="captcha"],iframe[src*="arkoselabs"],[data-testid*="captcha"]')) return 'CHALLENGE';
+  const u = document.querySelector('#login-username');
+  const p = document.querySelector('#login-password');
+  const legacy = document.querySelector('#login-button');
+  const formButtons = p?.form ? Array.from(p.form.querySelectorAll('button[type="submit"]')) : [];
+  const named = Array.from(document.querySelectorAll('button')).filter(e => e.type === 'submit' && /^(sign in|log in|เข้าสู่ระบบ|ลงชื่อเข้าใช้)$/i.test((e.textContent || '').trim()));
+  const b = legacy || (formButtons.length === 1 ? formButtons[0] : named.length === 1 ? named[0] : null);
+  if (!u || !p || !b) return 'NOT_READY';
+  if (u.value !== expectedUsername || p.value !== expectedPassword) return 'FILL_MISMATCH';
+  if (b.disabled || b.getAttribute('aria-disabled') === 'true') return 'PENDING';
+  b.click();
+  return 'CLICKED';
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function waitForRobloxLoginTab(tabId, job, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing') return false;
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); } catch { return false; }
+    if (tab?.status === 'complete') {
+      try {
+        const u = new URL(tab.url || '');
+        if (u.origin === 'https://www.roblox.com' && u.pathname.toLowerCase().startsWith('/login')) return true;
+        if (!isRobloxUrl(tab.url || '')) return false;
+      } catch { return false; }
+    }
+    await sleep(200);
+  }
+  return false;
+}
+
+async function autoFillAndSubmitRobloxLogin(job, credentials) {
+  if (!chrome.scripting?.executeScript || !chrome.tabs?.get || !credentials?.username || !credentials?.password) return 'UNAVAILABLE';
+  const key = `${job.jobId}:${job.generation}`;
+  if (autoFillInFlight || autoSubmittedKey === key) return 'SKIPPED';
+  if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing' || state.browserNotice?.code === 'CUSTOMER_ID_MISMATCH') return 'SKIPPED';
+  autoFillInFlight = true;
+  try {
+    const tabId = await openRobloxLoginTab({focus: true, navigate: true});
+    if (tabId === null) return 'UNAVAILABLE';
+    const ready = await waitForRobloxLoginTab(tabId, job, 20000);
+    if (!ready) return 'NOT_LOGIN_PAGE';
+    if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing' || state.browserNotice?.code === 'CUSTOMER_ID_MISMATCH') return 'SKIPPED';
+
+    let filled = false;
+    const fillDeadline = Date.now() + 15000;
+    while (Date.now() < fillDeadline) {
+      if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing') return 'CANCELLED';
+      let outcome;
+      try {
+        const res = await chrome.scripting.executeScript({target: {tabId}, func: fillRobloxLoginInPage, args: [credentials.username, credentials.password]});
+        outcome = res?.[0]?.result;
+      } catch { return 'SCRIPT_FAILED'; }
+      if (outcome === 'FILLED') { filled = true; break; }
+      if (outcome === 'CHALLENGE' || outcome === 'NOT_LOGIN_PAGE') return outcome;
+      await sleep(250);
+    }
+    if (!filled) return 'FORM_TIMEOUT';
+
+    const submitDeadline = Date.now() + 5000;
+    while (Date.now() < submitDeadline) {
+      if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing') return 'CANCELLED';
+      autoSubmittedKey = key;
+      let outcome;
+      try {
+        const res = await chrome.scripting.executeScript({target: {tabId}, func: submitRobloxLoginInPage, args: [credentials.username, credentials.password]});
+        outcome = res?.[0]?.result;
+      } catch { return 'SCRIPT_FAILED'; }
+      if (outcome === 'CLICKED') return 'CLICKED';
+      if (outcome === 'PENDING') {
+        autoSubmittedKey = '';
+        await sleep(200);
+        continue;
+      }
+      if (outcome === 'CHALLENGE' || outcome === 'NOT_LOGIN_PAGE' || outcome === 'FILL_MISMATCH') {
+        if (outcome === 'CHALLENGE') autoSubmittedKey = key;
+        return outcome;
+      }
+      return outcome || 'SCRIPT_FAILED';
+    }
+    return 'SUBMIT_TIMEOUT';
+  } finally {
+    autoFillInFlight = false;
+  }
 }
 
 async function clearChromeRobloxCookie(expectedCookie = null, {redirect = true} = {}) {
@@ -303,6 +425,7 @@ function snapshot(value) {
   if (!job || job.customer?.state !== 'preparing' || job.customer?.source === 'ram') {
     state.browserNotice = null;
     rejectedCookieKey = '';
+    autoSubmittedKey = '';
   }
   for (const [role, data] of blockerRoles(job)) {
     if (legacyCode(data.code)) continue;
@@ -431,11 +554,15 @@ async function prepareCurrent(job) {
     state.hasCredentials = true;
     state.browserNotice = null;
     rejectedCookieKey = '';
+    autoSubmittedKey = '';
     const result = await native.request('PREPARE_CUSTOMER', {jobId: job.jobId, generation: job.generation, username: credentials.username, mode: 'browser'});
     snapshot(result);
     if (ownsJob(job) && state.native?.current?.customer?.state === 'preparing') {
-      await openRobloxLoginTab({focus: true, navigate: true}).catch(() => {});
-      await tryCaptureBrowserSession().catch(() => {});
+      const captured = await tryCaptureBrowserSession().catch(() => false);
+      if (!captured && ownsJob(job) && state.native?.current?.customer?.state === 'preparing' && state.browserNotice?.code !== 'CUSTOMER_ID_MISMATCH') {
+        await openRobloxLoginTab({focus: true, navigate: true}).catch(() => {});
+        await autoFillAndSubmitRobloxLogin(job, credentials).catch(() => {});
+      }
       ensureRamSyncPolling();
     }
   } catch (error) {
@@ -589,13 +716,33 @@ async function handle(message) {
     case 'UI_ACCOUNTS': return accounts();
     case 'UI_COPY_CREDENTIALS': return copyCredentials(message.payload);
     case 'UI_OPEN_ROBLOX_LOGIN': await openRobloxLoginTab({focus: true, navigate: true}); return state;
-    case 'UI_CLEAR_ROBLOX_COOKIE':
+    case 'UI_CLEAR_ROBLOX_COOKIE': {
       await clearChromeRobloxCookie(null, {redirect: true});
       rejectedCookieKey = '';
+      autoSubmittedKey = '';
       state.browserNotice = null;
       broadcast();
-      await openRobloxLoginTab({focus: true, navigate: true});
+      const job = state.native?.current;
+      if (job && job.customer?.source !== 'ram' && job.customer?.state === 'preparing') {
+        try {
+          const creds = await copyCredentials({jobId: job.jobId, generation: job.generation});
+          await autoFillAndSubmitRobloxLogin(job, creds);
+        } catch {
+          await openRobloxLoginTab({focus: true, navigate: true});
+        }
+      } else {
+        await openRobloxLoginTab({focus: true, navigate: true});
+      }
       return state;
+    }
+    case 'UI_AUTO_FILL_LOGIN': {
+      const job = state.native?.current;
+      if (!job || job.customer?.source === 'ram' || job.customer?.state !== 'preparing') return state;
+      autoSubmittedKey = '';
+      const creds = await copyCredentials({jobId: job.jobId, generation: job.generation});
+      await autoFillAndSubmitRobloxLogin(job, creds);
+      return state;
+    }
     case 'UI_CHECK_BROWSER_LOGIN':
       rejectedCookieKey = '';
       state.browserNotice = null;
