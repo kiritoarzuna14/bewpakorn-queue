@@ -42,6 +42,14 @@ internal static class LoginFormScripts {
  internal const string FocusUserBody="if(!u||u.disabled||u.readOnly||challenge())return false;u.focus();return document.activeElement===u;";
  internal const string FocusPasswordBody="if(!p||p.disabled||p.readOnly||challenge()||typeof username!=='string'||!u||u.value!==username)return false;p.focus();return document.activeElement===p;";
  internal const string ButtonPointBody="if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return '';if(typeof b.scrollIntoView==='function')b.scrollIntoView({block:'center',inline:'center'});const r=b.getBoundingClientRect();if(!(r.width>0&&r.height>0))return '';return JSON.stringify({x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)});";
+ internal const string ClearUserBody="if(!u)return false;const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(u,'');u.dispatchEvent(new Event('input',{bubbles:true}));u.dispatchEvent(new Event('change',{bubbles:true}));return true;";
+ internal const string ClearPasswordBody="if(!p)return false;const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(p,'');p.dispatchEvent(new Event('input',{bubbles:true}));p.dispatchEvent(new Event('change',{bubbles:true}));return true;";
+ internal const string UserValueBody="return u?u.value:null;";
+ internal const string PasswordValueBody="return p?p.value:null;";
+ internal static string ClearUser {get{return "(()=>{"+Resolver+ClearUserBody+"})()";}}
+ internal static string ClearPassword {get{return "(()=>{"+Resolver+ClearPasswordBody+"})()";}}
+ internal static string UserValue {get{return "(()=>{"+Resolver+UserValueBody+"})()";}}
+ internal static string PasswordValue {get{return "(()=>{"+Resolver+PasswordValueBody+"})()";}}
  internal static string FocusUser {get{return "(()=>{"+Resolver+FocusUserBody+"})()";}}
  internal static string FocusPassword(string usernameJson){return "((username)=>{"+Resolver+FocusPasswordBody+"})("+usernameJson+")";}
  internal static string ButtonPoint {get{return "(()=>{"+Resolver+ButtonPointBody+"})()";}}

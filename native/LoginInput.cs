@@ -25,14 +25,31 @@ internal static partial class Host {
   string focused;try{focused=await core.ExecuteScriptAsync(script);}finally{script=null;}
   return focused=="true";
  }
- // Types one field with trusted keystrokes after focusing it. Returns false so
- // the caller can fall back to the checked scripted fill.
+ internal static async Task<string> FieldValue(CoreWebView2 core,bool password){
+  string script=password?LoginFormScripts.PasswordValue:LoginFormScripts.UserValue;
+  string raw;try{raw=await core.ExecuteScriptAsync(script);}finally{script=null;}
+  return J.Deserialize<string>(raw);
+ }
+ internal static async Task ClearField(CoreWebView2 core,bool password){
+  string script=password?LoginFormScripts.ClearPassword:LoginFormScripts.ClearUser;
+  try{await core.ExecuteScriptAsync(script);}catch{}finally{script=null;}
+ }
+ // Types one field with trusted keystrokes, clearing leftovers first and
+ // checking the result. A page that re-renders the field mid-typing would
+ // otherwise leave a partial value that later looks like a changed form.
  internal static async Task<bool> TypeField(CoreWebView2 core,bool password,string usernameJson,string passwordJson,string value){
-  try{
-   if(!await FocusField(core,password,usernameJson,passwordJson))return false;
-   await Task.Delay(60);
-   return await TypeTrusted(core,value);
-  }catch{return false;}
+  if(String.IsNullOrEmpty(value))return false;
+  for(int attempt=0;attempt<2;attempt++){
+   try{
+    if(!await FocusField(core,password,usernameJson,passwordJson))return false;
+    await ClearField(core,password);
+    await Task.Delay(45);
+    if(!await TypeTrusted(core,value))return false;
+    await Task.Delay(70);
+    if(String.Equals(await FieldValue(core,password),value,StringComparison.Ordinal))return true;
+   }catch{return false;}
+  }
+  return false;
  }
  // Clicks the sign-in control where it is drawn, not through element.click().
  internal static async Task<bool> ClickTrusted(CoreWebView2 core){

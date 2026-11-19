@@ -34,7 +34,7 @@ function fixture({legacy=false,sync=false,form=true,ambiguous=false,noIds=false,
  }};
  const context={document,HTMLInputElement:Input,Event:class{constructor(type){this.type=type;}},getComputedStyle:e=>e.style};
  const run=(body,args=false)=>args?vm.runInNewContext(`((username,password)=>{${scripts.Resolver}${body}})`,context):vm.runInNewContext(`(()=>{${scripts.Resolver}${body}})()`,context);
- return {b,p,u,events,controls,document,node,get clicks(){return clicks;},ready:()=>run(scripts.ReadyBody),readyUser:()=>run(scripts.ReadyUserBody),readyPassword:()=>run(scripts.ReadyPasswordBody,true)(username),fill:()=>run(scripts.FillBody,true)(username,password),fillUser:()=>run(scripts.FillUserBody,true)(username),fillPassword:()=>run(scripts.FillPasswordBody,true)(username,password),stage:()=>run(scripts.StageBody,true)(username,password),check:()=>run(scripts.CheckFilledBody,true)(username,password),submit:()=>run(scripts.SubmitBody,true)(username,password),challenge:()=>controls.modals.push(node({innerText:'Verify you are human'}))};
+ return {b,p,u,events,controls,document,node,get clicks(){return clicks;},ready:()=>run(scripts.ReadyBody),readyUser:()=>run(scripts.ReadyUserBody),readyPassword:()=>run(scripts.ReadyPasswordBody,true)(username),fill:()=>run(scripts.FillBody,true)(username,password),fillUser:()=>run(scripts.FillUserBody,true)(username),fillPassword:()=>run(scripts.FillPasswordBody,true)(username,password),stage:()=>run(scripts.StageBody,true)(username,password),check:()=>run(scripts.CheckFilledBody,true)(username,password),submit:()=>run(scripts.SubmitBody,true)(username,password),challenge:()=>controls.modals.push(node({innerText:'Verify you are human'})),clearUser:()=>run(scripts.ClearUserBody),clearPassword:()=>run(scripts.ClearPasswordBody),userValue:()=>run(scripts.UserValueBody),passwordValue:()=>run(scripts.PasswordValueBody)};
 }
 
 test('empty legacy and modern forms are fillable while Sign in is disabled',()=>{
@@ -112,4 +112,11 @@ test('both fields fill in one pass, username first, when the password is already
  assert.equal(f.u.value,username);assert.equal(f.p.value,password);
  assert.deepEqual(f.events,['input','change','input','change']);
  assert.equal(f.stage(),'READY');
+});
+
+test('a half-typed value can be cleared before retyping, leaving other fields alone',()=>{
+ const f=fixture({sync:true});
+ f.u.value='fixture_us';assert.equal(f.clearUser(),true);assert.equal(f.userValue(),'');
+ assert.equal(f.fillUser(),true);assert.equal(f.userValue(),username);
+ f.p.value='FIXT';f.u.value='kept';assert.equal(f.clearPassword(),true);assert.equal(f.passwordValue(),'');assert.equal(f.u.value,'kept');
 });

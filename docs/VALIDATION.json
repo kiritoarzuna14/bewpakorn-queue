@@ -1,38 +1,33 @@
-﻿{
-    "version":  "1.3.5",
-    "date":  "2026-11-19",
-    "timezone":  "Asia/Bangkok",
-    "sourceCodeCommit":  "d8e6b86c6527e65d1a8ebb944776efbf3c090550",
-    "mode":  "Original Queue WebView login retained; no separate Chrome/CDP to the user\u0027s Chrome, no shop-tab architecture change",
-    "observedProblem":  "Roblox kept answering the customer sign-in with the \u0027Verify you\u0027re human / Press and hold\u0027 card.",
-    "causes":  [
-                   "The form was filled by assigning input.value from script and submitted with element.click(), so every event was untrusted and the submit followed instantly, which is the pattern automated clients produce.",
-                   "Each attempt used a brand-new browser profile, so the device looked new every time (fixed in 1.3.3)."
-               ],
-    "changes":  [
-                    "Both fields are typed with DevTools protocol key events (isTrusted) at 28-72ms per character instead of a scripted value assignment; the checked scripted fill remains as a fallback when focusing or typing fails.",
-                    "The sign-in button is clicked with real mouse events at its on-screen position after scrolling it into view.",
-                    "New offline harness tests/native/InputProbe.cs proves the fixture page receives only trusted events, that the values match, and that a trusted click submits once.",
-                    "The same harness has a live mode that signs in with a random nonexistent username to prove the real page accepts typed input and reaches its own error message without a challenge."
-                ],
-    "nodeTests":  {
-                      "passed":  54,
-                      "failed":  0
-                  },
-    "nativeBuild":  "passed x64 compile and full native self-tests",
-    "nativeInputTests":  "INPUT_OK offline: 30 trusted key events, 0 untrusted, trusted click, one submit, exact values",
-    "livePublicProbe":  {
-                            "account":  "none (random nonexistent username, dummy password)",
-                            "page":  "https://www.roblox.com/login (dialog layout with \u0027Login to Roblox\u0027)",
-                            "result":  "LIVE_INPUT_OK: both fields typed, trusted click, page answered \u0027Incorrect username or password.\u0027 (CUSTOMER_PASSWORD_INVALID), challengeVisible=false",
-                            "stored":  "no credentials written to disk; probe profile deleted"
-                        },
-    "liveCustomerLoginTested":  false,
-    "installation":  "Staged 1.3.5 in LOCALAPPDATA and D:\\BewpakornQueue-1.0.0\\extension; release checksums, live extension hashes and installed host hash verified.",
-    "activation":  "Reload required in chrome://extensions",
-    "preservedData":  "Ledger and history untouched; the blocked order becomes retryable when the new host starts.",
-    "limitations":  [
-                        "No real customer account was used, so whether Roblox still challenges a specific account cannot be proven here.",
-                        "A challenge, if Roblox decides on one, still needs a single human press; the host then continues and finishes the form by itself."
-                    ]
+{
+  "version": "1.3.6",
+  "date": "2026-11-19",
+  "timezone": "Asia/Bangkok",
+  "sourceCodeCommit": "pending release commit",
+  "mode": "Original Queue WebView login retained; no separate Chrome/CDP to the user's Chrome, no shop-tab architecture change",
+  "observedProblem": "On the dialog layout the username was typed but the password stayed empty and the order ended as LOGIN_FORM_CHANGED, so the operator had to type the password by hand.",
+  "causes": [
+    "Typed input was not verified: when the page re-rendered the password field mid-typing, the partial or empty value was accepted as done.",
+    "A remaining partial value then looked like a changed form, so the job was blocked instead of retrying."
+  ],
+  "changes": [
+    "Each field is cleared, typed, then read back; a value that does not match is retyped once from a clean field.",
+    "A half-typed value that is only a prefix of what the host types is cleared and retyped once; a value edited by a person is never cleared.",
+    "The fill limit is 4 instead of 3, and hitting it records the stage trace in loginView so the next report shows what the window did.",
+    "New script helpers ClearUser/ClearPassword/UserValue/PasswordValue with a node test for partial clearing."
+  ],
+  "nodeTests": {
+    "passed": 55,
+    "failed": 0,
+    "newCases": "half-typed value cleared before retyping, other field untouched"
+  },
+  "nativeBuild": "passed x64 compile and full native self-tests",
+  "nativeInputTests": "INPUT_OK offline: 30 trusted key events, 0 untrusted, trusted click, one submit, verified values; LIVE_INPUT_OK on the real /login with a random nonexistent username: both fields typed and verified, trusted click, page answered 'Incorrect username or password.' with no challenge",
+  "liveCustomerLoginTested": false,
+  "installation": "Staged 1.3.6 in LOCALAPPDATA and D:\\BewpakornQueue-1.0.0\\extension; release checksums, live extension hashes and installed host hash verified.",
+  "activation": "Reload required in chrome://extensions",
+  "preservedData": "Ledger and history untouched; the blocked order becomes retryable when the new host starts.",
+  "limitations": [
+    "The exact re-render that cleared the password on this order could not be reproduced without that customer account; the repair path is covered by policy tests and the verified-typing probe rather than a live reproduction.",
+    "A challenge, if Roblox decides on one, still needs one human press."
+  ]
 }

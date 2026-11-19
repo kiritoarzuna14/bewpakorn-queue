@@ -76,7 +76,7 @@ internal static partial class Host {
      f.FormClosing+=async (s,e)=>{if(revoked)return;e.Cancel=true;if(revoking)return;revoking=true;try{await Task.WhenAny(ClearAuthCookies(core),Task.Delay(3000));}catch{}revoked=true;try{f.Close();}catch{}};
      core.NewWindowRequested+=(s,e)=>{e.Handled=true;};
      core.NavigationStarting+=(s,e)=>{Uri u;if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out u)||u.Scheme!="https"||!(u.Host.Equals("roblox.com",StringComparison.OrdinalIgnoreCase)||u.Host.EndsWith(".roblox.com",StringComparison.OrdinalIgnoreCase)))e.Cancel=true;};
-     var progress=new LoginProgress(DateTime.UtcNow);bool checking=false,expired=false,dispatchPending=false;string lastCookie=null;
+     var progress=new LoginProgress(DateTime.UtcNow);bool checking=false,expired=false,dispatchPending=false;string lastCookie=null;var stages=new List<string>();
      Func<Task> check=async ()=>{if(checking)return;checking=true;try{
       lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}
       // A manually completed verification may issue the cookie at any point.
@@ -108,13 +108,21 @@ internal static partial class Host {
       // after a human verification), instead of waiting for the next tick.
       for(int step=0;step<12;step++){
        string script=LoginFormScripts.Stage(J.Serialize(username),J.Serialize(secret.Value));string stage;try{stage=J.Deserialize<string>(await core.ExecuteScriptAsync(script));}finally{script=null;}
+       if(stages.Count<40)stages.Add(stage);
        if(stage=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");return;}
-       if(stage=="MISMATCH"){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
+       if(stage=="MISMATCH"){
+        // A half-typed value from our own keystrokes can be cleared and retyped
+        // once; a value someone else edited is never touched.
+        string uv=await FieldValue(core,false),pv=await FieldValue(core,true);
+        bool partial=(uv!=null&&(uv.Length==0||username.StartsWith(uv,StringComparison.Ordinal)))&&(pv!=null&&secret.Value!=null&&(pv.Length==0||secret.Value.StartsWith(pv,StringComparison.Ordinal)));
+        if(partial&&progress.RecordRepair()){await ClearField(core,false);await ClearField(core,true);await Task.Delay(120);continue;}
+        expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;
+       }
        if(stage=="MISSING")return;
        if(stage=="WAIT"){await Task.Delay(150);continue;}
        if(stage=="USER"||stage=="FILL_BOTH"||stage=="PASSWORD"){
         lock(Gate){if(!Current(jobId,gen))return;}
-        if(progress.Fills>=3){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
+        if(progress.Fills>=4){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");NoteLoginView(jobId,gen,"LOGIN_FORM_CHANGED","fill limit: "+String.Join(" ",stages));return;}
         string userJson=J.Serialize(username),passwordJson=J.Serialize(secret.Value);bool filled=false;
         // Trusted keystrokes first: the same form, typed like a person, which is
         // what keeps Roblox from answering with a human check.

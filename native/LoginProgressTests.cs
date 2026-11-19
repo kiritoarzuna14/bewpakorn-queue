@@ -19,7 +19,7 @@ internal static partial class Host {
   progress=new LoginProgress(start);Require(progress.Observe("",true,start)=="CUSTOMER_IDENTITY_VERIFICATION"&&!progress.BenignDialog(start.AddSeconds(14))&&progress.BenignDialog(start.AddSeconds(15)),"TEST_BENIGN_DIALOG_GRACE");
   progress.Resume(start.AddSeconds(15));Require(progress.CanAutomate(start.AddSeconds(16)),"TEST_BENIGN_DIALOG_RESUMES");
   progress=new LoginProgress(start);Require(progress.Observe("CUSTOMER_CAPTCHA_REQUIRED",true,start)!=""&&!progress.BenignDialog(start.AddSeconds(60)),"TEST_REAL_CHALLENGE_NEVER_AUTO_RESUMES");
-  progress=new LoginProgress(start);Require(progress.RecordFill()&&progress.RecordFill()&&progress.RecordFill()&&!progress.RecordFill(),"TEST_SAFE_FILL_BOUND");
+  progress=new LoginProgress(start);Require(progress.RecordFill()&&progress.RecordFill()&&progress.RecordFill()&&progress.RecordFill()&&!progress.RecordFill(),"TEST_SAFE_FILL_BOUND");
   Require(progress.BeginSubmission(start)&&!progress.ProveNoClick("UNKNOWN")&&progress.Submitted&&!progress.BeginSubmission(start),"TEST_UNKNOWN_SUBMIT_NEVER_REPEATED");
   foreach(string status in new[]{"PENDING","CHALLENGE","EMPTY","MISSING"}){progress=new LoginProgress(start);Require(progress.BeginSubmission(start)&&progress.ProveNoClick(status)&&!progress.Submitted&&progress.BeginSubmission(start.AddSeconds(1)),"TEST_PROVEN_NO_CLICK_MAY_WAIT");}
   progress=new LoginProgress(start);Require(progress.Timeout(start.AddSeconds(60))=="LOGIN_FORM_TIMEOUT","TEST_FORM_TIMEOUT");progress.RecordFill();Require(progress.Timeout(start.AddSeconds(60))=="LOGIN_SUBMIT_TIMEOUT","TEST_SUBMIT_TIMEOUT");

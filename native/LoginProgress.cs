@@ -27,10 +27,14 @@ internal sealed class LoginProgress {
  }
  internal bool BenignDialog(DateTime now){return WaitingForUser&&LastManualCode=="CUSTOMER_IDENTITY_VERIFICATION"&&DialogOnlySince!=DateTime.MaxValue&&now>=DialogOnlySince.AddSeconds(15);}
  internal void Resume(DateTime now){WaitingForUser=false;DialogOnlySince=DateTime.MaxValue;LoginDeadline=now.AddSeconds(90);if(!Submitted)FormDeadline=now.AddSeconds(120);}
+ internal int Repairs;
+ // Only a value that is a prefix of what the host would type can be its own
+ // partial input; anything else is somebody's edit and must not be cleared.
+ internal bool RecordRepair(){if(Repairs>=1)return false;Repairs++;return true;}
  internal bool CanAutomate(DateTime now){return !Submitted&&!WaitingForUser&&now<FormDeadline;}
  internal bool BeginSubmission(DateTime now){if(!CanAutomate(now))return false;Submitted=true;LoginDeadline=now.AddSeconds(90);return true;}
  internal bool ProveNoClick(string status){if(status!="PENDING"&&status!="CHALLENGE"&&status!="EMPTY"&&status!="MISSING")return false;Submitted=false;return true;}
- internal bool RecordFill(){if(Fills>=3)return false;Fills++;return true;}
+ internal bool RecordFill(){if(Fills>=4)return false;Fills++;return true;}
  internal string Timeout(DateTime now){
   if(WaitingForUser)return now>=HumanDeadline?LastManualCode:"";
   if(Submitted||HumanDeadline!=DateTime.MaxValue)return now>=LoginDeadline?"CUSTOMER_LOGIN_TIMEOUT":"";
