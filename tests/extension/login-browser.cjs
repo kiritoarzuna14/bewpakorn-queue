@@ -39,6 +39,7 @@ const form=({legacy=false,disabled=true}={})=>`<form onsubmit="event.preventDefa
   assert.equal(await run('ReadyPasswordBody',[credentials[0]]),true);assert.equal(await run('FillPasswordBody',credentials),true);
   assert.equal(await run('StageBody',credentials),'READY');assert.equal(await run('SubmitBody',credentials),'CLICKED');
   assert.equal(await page.evaluate(()=>window.clicks),1);assert.equal(await page.evaluate(()=>window.events.length),4);
+  await page.setContent(dialogHtml.replace(' disabled>','>'));assert.equal(await run('StageBody',credentials),'FILL_BOTH');assert.equal(await run('FillBody',credentials),true);assert.equal(await run('StageBody',credentials),'READY');
   assert.equal(networkRequests,0);console.log('Local offline login fixture passed: legacy + modern forms, exact fill/submit guard, hidden/duplicate controls, reactive clearing, visible manual CAPTCHA classification; zero network requests and no challenge interaction.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

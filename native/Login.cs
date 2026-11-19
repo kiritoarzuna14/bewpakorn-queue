@@ -15,6 +15,14 @@ using Microsoft.Web.WebView2.WinForms;
 internal static partial class Host {
  static Form loginForm;
  static string profilesRoot;
+ // One browser profile for every sign-in attempt. A brand-new profile makes
+ // Roblox see an unknown device each time, which is what escalated to the
+ // "Verify you're human" hold-button screen. Auth cookies are removed before
+ // and after every attempt, so the shared profile never keeps a session.
+ static string deviceProfile;
+ static async Task ClearAuthCookies(CoreWebView2 core){
+  try{foreach(var c in await core.CookieManager.GetCookiesAsync("https://www.roblox.com/")){if(c.Name!=".ROBLOSECURITY")continue;string domain=String.IsNullOrEmpty(c.Domain)?".roblox.com":c.Domain;string path=String.IsNullOrEmpty(c.Path)?"/":c.Path;var stale=core.CookieManager.CreateCookie(c.Name,String.Empty,domain,path);stale.Expires=DateTime.Now.AddDays(-1);core.CookieManager.AddOrUpdateCookie(stale);}}catch{}
+ }
  static void DeleteOwnedProfile(string profile){
   if(String.IsNullOrEmpty(profilesRoot))return;var root=Path.GetFullPath(profilesRoot).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;var target=Path.GetFullPath(profile);
   Require(target.StartsWith(root,StringComparison.OrdinalIgnoreCase) && String.Equals(Path.GetDirectoryName(target),root.TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase) && System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(target),@"^[0-9a-f]{32}$"),"PROFILE_PATH_INVALID");
@@ -35,7 +43,7 @@ internal static partial class Host {
  static Func<Dictionary<string,object>> receiverIdentity=ReadReceiverIdentity;
  static Func<Dictionary<string,object>,bool> receiverExited=ReceiverExited;
  static bool WebViewAvailable(){try{return !String.IsNullOrEmpty(CoreWebView2Environment.GetAvailableBrowserVersionString());}catch{return false;}}
- static void CleanProfiles(){if(String.IsNullOrEmpty(profilesRoot))return;Directory.CreateDirectory(profilesRoot);foreach(var d in Directory.GetDirectories(profilesRoot)){try{DeleteOwnedProfile(d);}catch{}}}
+ static void CleanProfiles(){if(String.IsNullOrEmpty(profilesRoot))return;Directory.CreateDirectory(profilesRoot);foreach(var d in Directory.GetDirectories(profilesRoot)){if(String.Equals(d,deviceProfile,StringComparison.OrdinalIgnoreCase))continue;try{DeleteOwnedProfile(d);}catch{}}}
  static Dictionary<string,object> Prepare(Dictionary<string,object> p){
   var job=D(ledger["current"]);Require(job!=null && S(job,"jobId")==S(p,"jobId") && S(job,"generation")==S(p,"generation"),"STALE_JOB");
   var role=D(job["customer"]);Require(String.IsNullOrEmpty(S(role,"source")) || S(role,"source")=="order","CUSTOMER_SOURCE_CHANGED");string username=S(p,"username"),password=S(p,"password");p.Remove("password");Require(username.Length>0 && username.Length<=128 && password.Length>0 && password.Length<=1024,"INVALID_REQUEST");Require(String.IsNullOrEmpty(S(role,"username")) || String.Equals(S(role,"username"),username,StringComparison.OrdinalIgnoreCase),"CUSTOMER_ID_MISMATCH");Require(S(role,"state")=="waiting","CUSTOMER_ALREADY_PREPARED");Require(WebViewAvailable(),"WEBVIEW_UNAVAILABLE");
@@ -54,18 +62,20 @@ internal static partial class Host {
  static void ClearManualWait(string jobId,string gen){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"waitingForUser")!="True"||job.ContainsKey("importIntent"))return;role["waitingForUser"]=false;if(LoginProgress.Manual(S(role,"code"))){role.Remove("code");role.Remove("loginView");role["state"]="preparing";role["canResume"]=false;}UpdateJobState(job);Bump();Save();}}
  static bool IsLoginPage(Uri uri){return uri!=null&&uri.Scheme=="https"&&uri.IsDefaultPort&&String.IsNullOrEmpty(uri.UserInfo)&&(uri.Host.Equals("www.roblox.com",StringComparison.OrdinalIgnoreCase)||uri.Host.Equals("roblox.com",StringComparison.OrdinalIgnoreCase))&&System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath,@"^/(?:[a-z]{2}(?:-[a-z]{2})?/)?login/?$",System.Text.RegularExpressions.RegexOptions.IgnoreCase);}
  static void RunLogin(string jobId,string gen,string username,LoginSecret secret){
-  string profile=Path.Combine(profilesRoot,NewId());Form owned=null;try{
+  string profile=deviceProfile;Form owned=null;try{
    using(var f=new Form())using(var browser=new WebView2()){
-    owned=f;lock(Gate){if(!Current(jobId,gen))return;loginForm=f;}
+    owned=f;bool revoking=false,revoked=false;lock(Gate){if(!Current(jobId,gen))return;loginForm=f;}
     f.FormClosed+=(sender,args)=>{secret.Clear();Block(jobId,gen,"CUSTOMER_LOGIN_CLOSED");};f.Text="Bewpakorn Queue - Roblox";f.Width=1000;f.Height=750;browser.Dock=DockStyle.Fill;f.Controls.Add(browser);
     f.Shown+=async (sender,args)=>{try{
-     lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}var env=await CoreWebView2Environment.CreateAsync(null,profile);await browser.EnsureCoreWebView2Async(env);var core=browser.CoreWebView2;core.Settings.IsPasswordAutosaveEnabled=false;core.Settings.IsGeneralAutofillEnabled=false;core.Settings.AreDevToolsEnabled=false;
+     lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}CoreWebView2 core=null;for(int attempt=0;attempt<2 && core==null;attempt++){try{var env=await CoreWebView2Environment.CreateAsync(null,profile);await browser.EnsureCoreWebView2Async(env);core=browser.CoreWebView2;}catch{if(attempt>0)throw;try{if(String.Equals(profile,deviceProfile,StringComparison.OrdinalIgnoreCase)&&Directory.Exists(profile))Directory.Delete(profile,true);}catch{}}}     core.Settings.IsPasswordAutosaveEnabled=false;core.Settings.IsGeneralAutofillEnabled=false;core.Settings.AreDevToolsEnabled=false;await ClearAuthCookies(core);
+     // The shared profile persists, so the session must be revoked before the
+     // window closes, not by deleting the profile directory.
+     f.FormClosing+=async (s,e)=>{if(revoked)return;e.Cancel=true;if(revoking)return;revoking=true;try{await Task.WhenAny(ClearAuthCookies(core),Task.Delay(3000));}catch{}revoked=true;try{f.Close();}catch{}};
      core.NewWindowRequested+=(s,e)=>{e.Handled=true;};
      core.NavigationStarting+=(s,e)=>{Uri u;if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out u)||u.Scheme!="https"||!(u.Host.Equals("roblox.com",StringComparison.OrdinalIgnoreCase)||u.Host.EndsWith(".roblox.com",StringComparison.OrdinalIgnoreCase)))e.Cancel=true;};
      var progress=new LoginProgress(DateTime.UtcNow);bool checking=false,expired=false,dispatchPending=false;string lastCookie=null;
      Func<Task> check=async ()=>{if(checking)return;checking=true;try{
       lock(Gate){if(!Current(jobId,gen)){f.Close();return;}}
-      if(DateTime.UtcNow>=progress.FormDeadline)secret.Clear();
       // A manually completed verification may issue the cookie at any point.
       // Verify/import before considering UI messages; never re-submit a login.
       var cookies=await core.CookieManager.GetCookiesAsync("https://www.roblox.com/");var auth=cookies.FirstOrDefault(c=>c.Name==".ROBLOSECURITY"&&!String.IsNullOrEmpty(c.Value));
@@ -81,30 +91,39 @@ internal static partial class Host {
       // shared scripts check visible controls and the exact values atomically.
       Uri source;if(expired||secret.Value==null||!progress.CanAutomate(DateTime.UtcNow)||!Uri.TryCreate(core.Source,UriKind.Absolute,out source)||!IsLoginPage(source))return;
       // The dialog layout fills left then right: the password field stays
-      // disabled until the username is committed, so one field per tick.
-      string script=LoginFormScripts.Stage(J.Serialize(username),J.Serialize(secret.Value));string stage;try{stage=J.Deserialize<string>(await core.ExecuteScriptAsync(script));}finally{script=null;}
-      if(stage=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");return;}
-      if(stage=="MISMATCH"){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
-      if(stage=="USER"||stage=="PASSWORD"){
+      // disabled until the username is committed, so one field per step. The
+      // loop finishes the same tick once the field opens (for example right
+      // after a human verification), instead of waiting for the next tick.
+      for(int step=0;step<12;step++){
+       string script=LoginFormScripts.Stage(J.Serialize(username),J.Serialize(secret.Value));string stage;try{stage=J.Deserialize<string>(await core.ExecuteScriptAsync(script));}finally{script=null;}
+       if(stage=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");return;}
+       if(stage=="MISMATCH"){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
+       if(stage=="MISSING")return;
+       if(stage=="WAIT"){await Task.Delay(150);continue;}
+       if(stage=="USER"||stage=="FILL_BOTH"||stage=="PASSWORD"){
+        lock(Gate){if(!Current(jobId,gen))return;}
+        if(progress.Fills>=3){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
+        script=stage=="USER"?LoginFormScripts.FillUser(J.Serialize(username)):stage=="PASSWORD"?LoginFormScripts.FillPassword(J.Serialize(username),J.Serialize(secret.Value)):LoginFormScripts.Fill(J.Serialize(username),J.Serialize(secret.Value));
+        bool filled;try{filled=await core.ExecuteScriptAsync(script)=="true";}finally{script=null;}
+        if(!filled)return;
+        progress.RecordFill();await Task.Delay(stage=="USER"?100:40);continue;
+       }
+       if(stage!="READY")return;
        lock(Gate){if(!Current(jobId,gen))return;}
-       if(progress.Fills>=3){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
-       script=stage=="USER"?LoginFormScripts.FillUser(J.Serialize(username)):LoginFormScripts.FillPassword(J.Serialize(username),J.Serialize(secret.Value));
-       try{if(await core.ExecuteScriptAsync(script)=="true")progress.RecordFill();}finally{script=null;}return;
+       if(!progress.BeginSubmission(DateTime.UtcNow)||!MarkSubmission(jobId,gen,true))return;
+       string result=null;script=LoginFormScripts.SubmitChecked(J.Serialize(username),J.Serialize(secret.Value));
+       dispatchPending=true;try{result=J.Deserialize<string>(await core.ExecuteScriptAsync(script));dispatchPending=false;}finally{script=null;if(result==null)secret.Clear();}
+       if(progress.ProveNoClick(result)){MarkSubmission(jobId,gen,false);if(result=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");}}
+       else if(result=="CLICKED")secret.Clear();
+       else{expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");}
+       return;
       }
-      if(stage!="READY")return;
-      lock(Gate){if(!Current(jobId,gen))return;}
-      if(!progress.BeginSubmission(DateTime.UtcNow)||!MarkSubmission(jobId,gen,true))return;
-      string result=null;script=LoginFormScripts.SubmitChecked(J.Serialize(username),J.Serialize(secret.Value));
-      dispatchPending=true;try{result=J.Deserialize<string>(await core.ExecuteScriptAsync(script));dispatchPending=false;}finally{script=null;if(result==null)secret.Clear();}
-      if(progress.ProveNoClick(result)){MarkSubmission(jobId,gen,false);if(result=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");}}
-      else if(result=="CLICKED")secret.Clear();
-      else{expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");}
      }catch{if(dispatchPending){dispatchPending=false;secret.Clear();expired=true;Block(jobId,gen,"LOGIN_FORM_CHANGED");}else{string timeout=progress.Timeout(DateTime.UtcNow);if(timeout!=""){secret.Clear();expired=true;if(LoginProgress.Manual(timeout)&&progress.WaitingForUser)WaitForManual(jobId,gen,timeout);else Block(jobId,gen,timeout);}}}finally{checking=false;}};
      core.DOMContentLoaded+=async(s,e)=>await check();core.NavigationCompleted+=async(s,e)=>await check();var timer=new System.Windows.Forms.Timer();timer.Interval=1000;timer.Tick+=async(s,e)=>await check();f.FormClosed+=(s,e)=>timer.Dispose();timer.Start();core.Navigate("https://www.roblox.com/login");
     }catch{secret.Clear();Block(jobId,gen,"WEBVIEW_UNAVAILABLE");f.Close();}};
     Application.Run(f);
    }
-  }catch{Block(jobId,gen,"WEBVIEW_UNAVAILABLE");}finally{secret.Clear();lock(Gate){if(Object.ReferenceEquals(loginForm,owned))loginForm=null;}try{DeleteOwnedProfile(profile);}catch{}}
+  }catch{Block(jobId,gen,"WEBVIEW_UNAVAILABLE");}finally{secret.Clear();lock(Gate){if(Object.ReferenceEquals(loginForm,owned))loginForm=null;}}
  }
  static Dictionary<string,object> Authenticated(string cookie){var req=(HttpWebRequest)WebRequest.Create("https://users.roblox.com/v1/users/authenticated");req.AllowAutoRedirect=false;req.Timeout=8000;req.ReadWriteTimeout=8000;req.Headers[HttpRequestHeader.Cookie]=".ROBLOSECURITY="+cookie;using(var r=req.GetResponse())using(var sr=new StreamReader(r.GetResponseStream()))return D(J.DeserializeObject(sr.ReadToEnd()));}
  static bool TransientIdentityFailure(WebException e){var response=e.Response as HttpWebResponse;if(response!=null){int status=(int)response.StatusCode;return status==408||status==429||status>=500;}return e.Status==WebExceptionStatus.Timeout||e.Status==WebExceptionStatus.ConnectFailure||e.Status==WebExceptionStatus.ConnectionClosed||e.Status==WebExceptionStatus.NameResolutionFailure||e.Status==WebExceptionStatus.ReceiveFailure||e.Status==WebExceptionStatus.SendFailure;}

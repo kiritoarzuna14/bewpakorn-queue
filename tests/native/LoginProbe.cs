@@ -37,6 +37,7 @@ internal static class LoginProbe {
       report="{\"ready\":"+ready+",\"diag\":"+diag+"}";
       string stage=await core.ExecuteScriptAsync(LoginFormScripts.Stage(Quote(username),Quote(password)));string action="none";
       if(stage=="\"USER\"")action=await core.ExecuteScriptAsync(LoginFormScripts.FillUser(Quote(username)));
+      else if(stage=="\"FILL_BOTH\"")action=await core.ExecuteScriptAsync(LoginFormScripts.Fill(Quote(username),Quote(password)));
       else if(stage=="\"PASSWORD\"")action=await core.ExecuteScriptAsync(LoginFormScripts.FillPassword(Quote(username),Quote(password)));
       else if(stage=="\"READY\""){action=await core.ExecuteScriptAsync(LoginFormScripts.Submit);if(action=="\"CLICKED\""){phase=1;submitted=DateTime.UtcNow;}}
       string challenge=await core.ExecuteScriptAsync(LoginFormScripts.ChallengeVisible);

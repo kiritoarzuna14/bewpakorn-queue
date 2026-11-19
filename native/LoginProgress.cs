@@ -3,7 +3,7 @@ using System;
 // No credentials or browser actions: this policy only controls when the host
 // may prepare/submit and when a human verification must keep its real reason.
 internal sealed class LoginProgress {
- internal readonly DateTime FormDeadline;
+ internal DateTime FormDeadline;
  internal DateTime LoginDeadline=DateTime.MaxValue,HumanDeadline=DateTime.MaxValue;
  internal bool Submitted,WaitingForUser;
  internal int Fills;
@@ -13,7 +13,12 @@ internal sealed class LoginProgress {
  internal string Observe(string issue,bool visibleDialog,DateTime now){
   string manual=Manual(issue)?issue:String.IsNullOrEmpty(issue)&&visibleDialog?"CUSTOMER_IDENTITY_VERIFICATION":"";
   if(manual!=""){if(HumanDeadline==DateTime.MaxValue)HumanDeadline=now.AddMinutes(10);WaitingForUser=true;LastManualCode=manual;return manual;}
-  if(WaitingForUser){WaitingForUser=false;LoginDeadline=now.AddSeconds(90);}
+  if(WaitingForUser){
+   WaitingForUser=false;LoginDeadline=now.AddSeconds(90);
+   // The human verification used up the preparation window. Reopen it instead
+   // of discarding the password the user was just asked to stand behind.
+   if(!Submitted)FormDeadline=now.AddSeconds(120);
+  }
   return "";
  }
  internal bool CanAutomate(DateTime now){return !Submitted&&!WaitingForUser&&now<FormDeadline;}

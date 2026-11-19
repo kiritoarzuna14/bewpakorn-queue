@@ -99,3 +99,13 @@ test('the dialog layout fills the left field first, then the right, then submits
  assert.equal(f.stage(),'READY');assert.equal(f.submit(),'CLICKED');assert.equal(f.clicks,1);
  assert.equal(f.events.length,4);
 });
+
+test('both fields fill in one pass, username first, when the password is already usable',()=>{
+ const f=fixture({dialog:true,noIds:true});
+ assert.equal(f.p.disabled,false);
+ assert.equal(f.stage(),'FILL_BOTH');
+ assert.equal(f.fill(),true);assert.equal(f.clicks,0);
+ assert.equal(f.u.value,username);assert.equal(f.p.value,password);
+ assert.deepEqual(f.events,['input','change','input','change']);
+ assert.equal(f.stage(),'READY');
+});

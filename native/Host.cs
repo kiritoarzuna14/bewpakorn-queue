@@ -32,7 +32,7 @@ internal static partial class Host {
   string ramDirectory=Environment.ExpandEnvironmentVariables(S(cfg,"ramDirectory")); string folder=Environment.ExpandEnvironmentVariables(S(cfg,"dataDirectory")); Require(Path.IsPathRooted(ramDirectory) && Path.IsPathRooted(folder),"CONFIG_INVALID"); ramPath=Path.Combine(ramDirectory,"AccountData.json"); ramExePath=Path.GetFullPath(Path.Combine(ramDirectory,"Bewpakorn RAM.exe"));
   Directory.CreateDirectory(folder); ledgerPath=Path.Combine(folder,"ledger.json");
   bool created; mutex=new Mutex(true,@"Local\BewpakornQueue.NativeHost.v1",out created); Require(created,"HOST_BUSY");
-  profilesRoot=Path.Combine(folder,"profiles"); CleanProfiles(); LoadLedger();
+  profilesRoot=Path.Combine(folder,"profiles"); deviceProfile=Path.Combine(profilesRoot,"device"); CleanProfiles(); LoadLedger();
  }
  static void LoadLedger(){
   if(!File.Exists(ledgerPath)){ledger=Obj("revision",0,"current",null,"handled",new object[0],"commands",new Dictionary<string,object>());return;}

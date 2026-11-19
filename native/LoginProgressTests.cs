@@ -13,8 +13,9 @@ internal static partial class Host {
   Require(progress.Timeout(start.AddSeconds(300))==""&&progress.Timeout(start.AddSeconds(311))=="CUSTOMER_LOGIN_TIMEOUT","TEST_POST_VERIFICATION_COOKIE_WAIT");
   progress=new LoginProgress(start);progress.BeginSubmission(start);progress.Observe("CUSTOMER_CAPTCHA_REQUIRED",true,start);Require(progress.Timeout(start.AddSeconds(601))=="CUSTOMER_CAPTCHA_REQUIRED","TEST_LONG_MANUAL_WAIT_REASON");progress.Observe("",false,start.AddSeconds(601));Require(progress.Timeout(start.AddSeconds(602))==""&&progress.Timeout(start.AddSeconds(691))=="CUSTOMER_LOGIN_TIMEOUT"&&progress.Submitted,"TEST_LATE_MANUAL_COMPLETION_GETS_COOKIE_WAIT");
   progress=new LoginProgress(start);Require(progress.Observe("",true,start)=="CUSTOMER_IDENTITY_VERIFICATION"&&!progress.CanAutomate(start),"TEST_UNREADABLE_MODAL_PAUSES");
-  progress.Observe("",false,start.AddSeconds(10));Require(progress.CanAutomate(start.AddSeconds(10)),"TEST_BEFORE_CLICK_MANUAL_RESUME");
-  Require(!progress.CanAutomate(start.AddSeconds(60)),"TEST_PASSWORD_DEADLINE_NOT_EXTENDED_BY_HUMAN_WAIT");
+  progress.Observe("",false,start.AddSeconds(10));Require(progress.CanAutomate(start.AddSeconds(10))&&progress.CanAutomate(start.AddSeconds(129)),"TEST_BEFORE_CLICK_MANUAL_RESUME");
+  Require(!progress.CanAutomate(start.AddSeconds(131)),"TEST_REOPENED_FORM_WINDOW_STAYS_BOUNDED");
+  progress=new LoginProgress(start);progress.Observe("CUSTOMER_CAPTCHA_REQUIRED",true,start.AddSeconds(2));progress.Observe("",false,start.AddSeconds(95));Require(progress.CanAutomate(start.AddSeconds(96)),"TEST_LATE_VERIFICATION_MAY_FINISH_LOGIN");
   progress=new LoginProgress(start);Require(progress.RecordFill()&&progress.RecordFill()&&progress.RecordFill()&&!progress.RecordFill(),"TEST_SAFE_FILL_BOUND");
   Require(progress.BeginSubmission(start)&&!progress.ProveNoClick("UNKNOWN")&&progress.Submitted&&!progress.BeginSubmission(start),"TEST_UNKNOWN_SUBMIT_NEVER_REPEATED");
   foreach(string status in new[]{"PENDING","CHALLENGE","EMPTY","MISSING"}){progress=new LoginProgress(start);Require(progress.BeginSubmission(start)&&progress.ProveNoClick(status)&&!progress.Submitted&&progress.BeginSubmission(start.AddSeconds(1)),"TEST_PROVEN_NO_CLICK_MAY_WAIT");}
