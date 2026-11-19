@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bewpakorn Queue",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "คิวออเดอร์แมพสำหรับ Bewpakorn",
   "permissions": [
     "sidePanel",
@@ -9,10 +9,13 @@
     "nativeMessaging",
     "notifications",
     "tabs",
-    "scripting"
+    "scripting",
+    "cookies"
   ],
   "host_permissions": [
-    "https://bewpakorn.rdcw.xyz/*"
+    "https://bewpakorn.rdcw.xyz/*",
+    "https://roblox.com/*",
+    "https://*.roblox.com/*"
   ],
   "background": {
     "service_worker": "worker.js",

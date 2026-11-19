@@ -11,13 +11,13 @@ test('real worker + shop + queue: oldest first, background editor, RAM hand-off,
  const runtimeMessage=event(),action=event();
  const port={onMessage:event(),onDisconnect:event(),postMessage(m){nativeCalls.push(m);queueMicrotask(()=>{
   let payload;
-  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
+  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true,browserLogin:true,customerGameLaunch:true};else if(m.type==='GET_SNAPSHOT')payload={revision,current,handled};
   else if(m.type==='GET_ACCOUNT_METADATA')payload={accounts:[{userId:'999',username:'customer_demo'}]};
   else if(m.type==='CLAIM_ORDER'){
    assert.deepEqual(m.payload.protectedOperatorUserIds?.slice().sort(),['123','456']);
    assert.equal(current,null);const order=m.payload.order;current={jobId:`job${++serial}`,generation:1,completionToken:`token${serial}`,order,state:'preparing',customer:{state:'waiting',username:''}};revision++;payload={revision,current,handled};
   }else if(m.type==='PREPARE_CUSTOMER'){
-   assert.equal(m.payload.jobId,current.jobId);assert.equal(m.payload.password,'FAKE_PASSWORD_ONLY');current.customer={state:'ready',username:m.payload.username,userId:'999'};current.state='ready';revision++;payload={revision,current,handled};
+   assert.equal(m.payload.jobId,current.jobId);assert.equal(m.payload.mode,'browser');assert.equal(m.payload.password,undefined);current.customer={state:'ready',username:m.payload.username,userId:'999'};current.state='ready';revision++;payload={revision,current,handled};
   }else if(m.type==='COMPLETE_CURRENT'){
    assert.equal(local.completionIntent.commandId,m.payload.commandId);assert.equal(m.payload.jobId,current.jobId);handled.push({shopId:current.order.shopId,orderId:current.order.orderId,completedAt:'2026-11-16T12:00:00Z',order:current.order});current=null;revision++;payload={revision,current,handled};
   }else if(m.type==='UNDO_LAST'){

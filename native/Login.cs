@@ -36,12 +36,100 @@ internal static partial class Host {
  static Func<Dictionary<string,object>,bool> receiverExited=ReceiverExited;
  static bool WebViewAvailable(){try{return !String.IsNullOrEmpty(CoreWebView2Environment.GetAvailableBrowserVersionString());}catch{return false;}}
  static void CleanProfiles(){if(String.IsNullOrEmpty(profilesRoot))return;Directory.CreateDirectory(profilesRoot);foreach(var d in Directory.GetDirectories(profilesRoot)){try{DeleteOwnedProfile(d);}catch{}}}
+ static string browserBaselineKey;
+ static string browserBaselineFingerprint;
+ static void CaptureBrowserBaseline(string jobId,string gen,string username){
+  browserBaselineKey=jobId+":"+gen;
+  browserBaselineFingerprint="";
+  try{
+   var existing=readSavedAccounts().Select(D).FirstOrDefault(a=>a!=null && String.Equals(S(a,"Username"),username,StringComparison.OrdinalIgnoreCase));
+   string tok=existing!=null?S(existing,"SecurityToken"):"";
+   if(!String.IsNullOrEmpty(tok))browserBaselineFingerprint=Fingerprint(tok);
+  }catch{}
+ }
  static Dictionary<string,object> Prepare(Dictionary<string,object> p){
   var job=D(ledger["current"]);Require(job!=null && S(job,"jobId")==S(p,"jobId") && S(job,"generation")==S(p,"generation"),"STALE_JOB");
-  var role=D(job["customer"]);Require(String.IsNullOrEmpty(S(role,"source")) || S(role,"source")=="order","CUSTOMER_SOURCE_CHANGED");string username=S(p,"username"),password=S(p,"password");Require(username.Length>0 && username.Length<=128 && password.Length>0 && password.Length<=1024,"INVALID_REQUEST");Require(String.IsNullOrEmpty(S(role,"username")) || String.Equals(S(role,"username"),username,StringComparison.OrdinalIgnoreCase),"CUSTOMER_ID_MISMATCH");Require(S(role,"state")=="waiting","CUSTOMER_ALREADY_PREPARED");Require(WebViewAvailable(),"WEBVIEW_UNAVAILABLE");
+  var role=D(job["customer"]);Require(String.IsNullOrEmpty(S(role,"source")) || S(role,"source")=="order","CUSTOMER_SOURCE_CHANGED");string username=S(p,"username");Require(username.Length>0 && username.Length<=128,"INVALID_REQUEST");Require(String.IsNullOrEmpty(S(role,"username")) || String.Equals(S(role,"username"),username,StringComparison.OrdinalIgnoreCase),"CUSTOMER_ID_MISMATCH");Require(S(role,"state")=="waiting","CUSTOMER_ALREADY_PREPARED");
   var order=D(job["order"]);Require(String.IsNullOrEmpty(S(order,"customerUsername")) || String.Equals(S(order,"customerUsername"),username,StringComparison.OrdinalIgnoreCase),"CUSTOMER_ID_MISMATCH");order["customerUsername"]=username;
-  role["source"]="order";role["username"]=username;role["state"]="preparing";role["canResume"]=false;UpdateJobState(job);Bump();Save();
-  string jobId=S(job,"jobId"),gen=S(job,"generation");var thread=new Thread(()=>RunLogin(jobId,gen,username,password));thread.SetApartmentState(ApartmentState.STA);thread.IsBackground=true;thread.Start();return Snapshot();
+  role["source"]="order";role["username"]=username;role["state"]="preparing";role["loginMode"]="browser";role["canResume"]=false;role.Remove("code");role.Remove("loginView");role.Remove("game");
+  CaptureBrowserBaseline(S(job,"jobId"),S(job,"generation"),username);
+  UpdateJobState(job);Bump();Save();
+  return Snapshot();
+ }
+ static Dictionary<string,object> ImportBrowserSession(Dictionary<string,object> p){
+  Require(p!=null,"INVALID_REQUEST");
+  string jobId=S(p,"jobId"),gen=S(p,"generation"),username=S(p,"username"),cookie=S(p,"cookie");
+  Require(username.Length>0 && username.Length<=128 && cookie.Length>0 && cookie.Length<=8192,"INVALID_REQUEST");
+  var job=D(ledger["current"]);Require(job!=null && S(job,"jobId")==jobId && S(job,"generation")==gen,"STALE_JOB");
+  var role=D(job["customer"]);Require(String.IsNullOrEmpty(S(role,"source")) || S(role,"source")=="order","CUSTOMER_SOURCE_CHANGED");
+  Require(S(role,"state")!="ready","CUSTOMER_ALREADY_PREPARED");
+  var order=D(job["order"]);Require(String.IsNullOrEmpty(S(order,"customerUsername")) || String.Equals(S(order,"customerUsername"),username,StringComparison.OrdinalIgnoreCase),"CUSTOMER_ID_MISMATCH");
+  Require(!job.ContainsKey("importIntent"),"RAM_IMPORT_UNCERTAIN");
+  Dictionary<string,object> identity;
+  try{identity=authenticate(cookie);}catch{return Obj("matched",false,"imported",false,"canClearBrowserCookie",false,"code","CUSTOMER_SESSION_INVALID","snapshot",Snapshot());}
+  string id=S(identity,"id"),actualName=S(identity,"name");long numericId;
+  if(!Int64.TryParse(id,out numericId) || numericId<=0 || String.IsNullOrEmpty(actualName)){
+   return Obj("matched",false,"imported",false,"canClearBrowserCookie",false,"code","CUSTOMER_SESSION_INVALID","snapshot",Snapshot());
+  }
+  if(!String.Equals(actualName,username,StringComparison.OrdinalIgnoreCase)){
+   return Obj("matched",false,"imported",false,"canClearBrowserCookie",false,"code","CUSTOMER_ID_MISMATCH","actualUsername",actualName,"actualUserId",id,"snapshot",Snapshot());
+  }
+  if(S(D(job.ContainsKey("operator")?job["operator"]:null),"userId")==id || A(job.ContainsKey("protectedOperatorUserIds")?job["protectedOperatorUserIds"]:null).Any(x=>Convert.ToString(x)==id)){
+   Block(jobId,gen,"ROLE_CONFLICT");throw new HostError("ROLE_CONFLICT");
+  }
+  bool intentSaved=false;
+  try{
+   var receiver=receiverIdentity();Require(receiver!=null && !String.IsNullOrEmpty(S(receiver,"pid")) && !String.IsNullOrEmpty(S(receiver,"startTimeUtcTicks")),"RAM_RECEIVER_UNAVAILABLE");
+   job["importIntent"]=Obj("jobId",jobId,"userId",id,"cookieFingerprint",Fingerprint(cookie),"pid",receiver["pid"],"startTimeUtcTicks",receiver["startTimeUtcTicks"]);Bump();Save();intentSaved=true;
+   var ack=importSession(cookie);Require(S(ack,"protocolVersion")=="2" && S(ack,"imported")=="True" && S(ack,"canClearBrowserSession")=="True","RAM_IMPORT_FAILED");
+   var account=persistedAccount(id);Require(account!=null && S(account,"UserID")==id && S(account,"SecurityToken")==cookie,"RAM_PERSISTENCE_UNVERIFIED");
+   job.Remove("importIntent");
+   order["customerUsername"]=username;
+   role["userId"]=id;role["username"]=actualName;role["state"]="ready";role["loginMode"]="browser";role.Remove("code");role.Remove("loginView");
+   UpdateJobState(job);Bump();Save();
+   try{StartCustomerGameLaunch(jobId,gen,id,cookie,"auto");}catch{}
+   return Obj("matched",true,"imported",true,"canClearBrowserCookie",true,"userId",id,"username",actualName,"snapshot",Snapshot());
+  }catch(HostError e){
+   string code=intentSaved?"RAM_IMPORT_UNCERTAIN":e.Code;
+   if(intentSaved)Block(jobId,gen,code);
+   throw new HostError(code);
+  }catch{
+   string code=intentSaved?"RAM_IMPORT_UNCERTAIN":"RAM_IMPORT_FAILED";
+   if(intentSaved)Block(jobId,gen,code);
+   throw new HostError(code);
+  }finally{cookie=null;}
+ }
+ static Dictionary<string,object> SyncRamCustomer(Dictionary<string,object> p){
+  Require(p!=null,"INVALID_REQUEST");
+  string jobId=S(p,"jobId"),gen=S(p,"generation"),username=S(p,"username");
+  Require(username.Length>0 && username.Length<=128,"INVALID_REQUEST");
+  if(!Current(jobId,gen))return Obj("synced",false,"snapshot",Snapshot());
+  var job=D(ledger["current"]);var role=D(job["customer"]);
+  if(S(role,"state")!="preparing" || S(role,"loginMode")!="browser" || job.ContainsKey("importIntent") || browserBaselineKey!=jobId+":"+gen){
+   return Obj("synced",false,"snapshot",Snapshot());
+  }
+  object[] accounts;try{accounts=readSavedAccounts();}catch{return Obj("synced",false,"snapshot",Snapshot());}
+  var acc=accounts.Select(D).FirstOrDefault(a=>a!=null && String.Equals(S(a,"Username"),username,StringComparison.OrdinalIgnoreCase));
+  if(acc==null)return Obj("synced",false,"snapshot",Snapshot());
+  string token=S(acc,"SecurityToken");
+  if(String.IsNullOrWhiteSpace(token))return Obj("synced",false,"snapshot",Snapshot());
+  try{
+   string fp=Fingerprint(token);
+   if(fp==browserBaselineFingerprint)return Obj("synced",false,"snapshot",Snapshot());
+   Dictionary<string,object> identity;
+   try{identity=authenticate(token);}catch{return Obj("synced",false,"snapshot",Snapshot());}
+   string id=S(identity,"id"),actualName=S(identity,"name");long numericId;
+   if(!Int64.TryParse(id,out numericId) || numericId<=0 || id!=S(acc,"UserID") || !String.Equals(actualName,username,StringComparison.OrdinalIgnoreCase)){
+    return Obj("synced",false,"snapshot",Snapshot());
+   }
+   if(S(D(job.ContainsKey("operator")?job["operator"]:null),"userId")==id || A(job.ContainsKey("protectedOperatorUserIds")?job["protectedOperatorUserIds"]:null).Any(x=>Convert.ToString(x)==id)){
+    Block(jobId,gen,"ROLE_CONFLICT");throw new HostError("ROLE_CONFLICT");
+   }
+   role["userId"]=id;role["username"]=actualName;role["state"]="ready";role["loginMode"]="browser";role.Remove("code");role.Remove("loginView");
+   UpdateJobState(job);Bump();Save();
+   try{StartCustomerGameLaunch(jobId,gen,id,token,"auto");}catch{}
+   return Obj("synced",true,"userId",id,"username",actualName,"snapshot",Snapshot());
+  }finally{token=null;}
  }
  // Roles describe verified browser/RAM sessions only; games are opened by hand.
  static void UpdateJobState(Dictionary<string,object> job){var customer=D(job["customer"]);var op=D(job.ContainsKey("operator")?job["operator"]:null);var blocked=S(customer,"state")=="blocked"?customer:S(op,"state")=="blocked"?op:null;if(blocked!=null){job["state"]="blocked";job["code"]=S(blocked,"code");}else if(S(customer,"state")=="ready" && (op==null || S(op,"state")=="ready")){job["state"]="ready";job.Remove("code");}else{job["state"]="preparing";job.Remove("code");}}

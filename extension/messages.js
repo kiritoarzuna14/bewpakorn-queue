@@ -31,3 +31,18 @@ export function problemMessage(code){return problems[code] || problems.UNKNOWN_E
 
 Object.assign(problems,{STALE_JOB:"ออเดอร์หรือบัญชีเปลี่ยนแล้ว กรุณาเลือกอีกครั้ง",BUSY:"กำลังทำรายการ กรุณารอสักครู่",INVALID_SELECTION:"กรุณาเลือกบัญชีสำหรับงานนี้อีกครั้ง",RAM_ACCOUNT_NOT_FOUND:"ไม่พบบัญชีที่เลือกใน RAM",NAVIGATION_PENDING:"กำลังรอผลย้อนกลับเดิม"});
 Object.assign(problems,{OPERATOR_SESSION_INVALID:'เซสชันบัญชีที่เลือกใช้ไม่ได้ กรุณาล็อกอินบัญชีนี้ใหม่ใน RAM',OPERATOR_VALIDATION_UNAVAILABLE:'ยังตรวจเซสชันบัญชีที่เลือกไม่ได้ กรุณาตรวจการเชื่อมต่อ',RAM_VALIDATION_UNAVAILABLE:'ยังอ่านหรือตรวจบัญชีที่เลือกใน RAM ไม่ได้ กรุณาตรวจ RAM',STALE_HISTORY:'ประวัติออเดอร์เปลี่ยนแล้ว กรุณากดย้อนกลับใหม่',CUSTOMER_SOURCE_CHANGED:'บัญชีลูกค้าเปลี่ยนแล้ว กรุณาเลือกบัญชีอีกครั้ง',INVALID_ACCOUNT_SELECTION:'ข้อมูลบัญชีที่เลือกไม่ถูกต้อง กรุณาเลือกอีกครั้ง'});
+Object.assign(problems,{
+ BROWSER_LOGIN_WAITING:'กรุณาล็อกอินบัญชีลูกค้าบน Chrome (หากมีหน้ายืนยันตัวตน/OTP ให้กดยืนยันเองได้เลย)',
+ ROBLOX_PROTOCOL_UNAVAILABLE:'ไม่พบตัวเปิดเกม Roblox บนเครื่องนี้ กรุณาติดตั้ง Roblox Player',
+ ROBLOX_PROTOCOL_UNTRUSTED:'ตัวเปิดเกม Roblox ไม่ผ่านการตรวจลายเซ็นดิจิทัล',
+ GAME_LAUNCH_CHALLENGE:'Roblox ขอการยืนยันเพิ่มเติมตอนขอตั๋วเข้าเกม กรุณาลองเปิดเกมจาก RAM หรือลองอีกครั้ง',
+ GAME_LAUNCH_TICKET_DENIED:'ขอตั๋วเข้าเกม Roblox ไม่สำเร็จ กรุณาตรวจเซสชันใน RAM แล้วลองเปิดเกมอีกครั้ง',
+ GAME_LAUNCH_NETWORK_UNAVAILABLE:'เชื่อมต่อ Roblox เพื่อเปิดเกมไม่สำเร็จ กรุณาลองกดเปิดเกมอีกครั้ง',
+ GAME_LAUNCH_UNAVAILABLE:'เปิดเกม Roblox ไม่สำเร็จ กรุณาลองกดเปิดเกมอีกครั้ง',
+ GAME_PLACE_INVALID:'รหัสแมพ (Place ID) ของออเดอร์ไม่ถูกต้อง',
+ PRIVATE_TARGET_MISSING:'แมพนี้ยังไม่มีลิงก์ Private Server ใน RAM',
+ PRIVATE_TARGET_DENIED:'เข้า Private Server ไม่ได้ (ลิงก์อาจหมดอายุหรือจำกัดสิทธิ์) กดเข้า Public Server แทนได้',
+ PRIVATE_TARGET_ACCESS_UNAVAILABLE:'อ่านรหัสเข้า Private Server ไม่สำเร็จ กดเข้า Public Server แทนได้',
+ PRIVATE_TARGET_REDIRECT_REJECTED:'ลิงก์ Private Server เปลี่ยนเส้นทางไม่ถูกต้อง',
+ CREDENTIALS_UNAVAILABLE:'ยังอ่านข้อมูลบัญชีลูกค้าไม่ได้ กรุณาเปิดหน้าออเดอร์แล้วลองใหม่'
+});

@@ -35,4 +35,91 @@ internal static partial class Host {
    job=TestJob("settle");var entered=new ManualResetEvent(false);var release=new ManualResetEvent(false);authenticate=c=>Obj("id","123","name","Customer");persistedAccount=id=>Obj("UserID",id,"SecurityToken","fixture-cookie");importSession=c=>{entered.Set();Require(release.WaitOne(5000),"TEST");return Obj("protocolVersion",2,"imported",true,"canClearBrowserSession",true);};var settling=job;var worker=new Thread(()=>FinishLogin(S(settling,"jobId"),S(settling,"generation"),"Customer","fixture-cookie"));worker.Start();Require(entered.WaitOne(5000),"TEST");var completed=new ManualResetEvent(false);var completer=new Thread(()=>{lock(Gate){Complete(TestComplete(settling));}completed.Set();});completer.Start();Require(!completed.WaitOne(100),"TEST");release.Set();Require(worker.Join(5000) && completed.WaitOne(5000) && completer.Join(5000),"TEST");Require(ledger["current"]==null,"TEST");var next=TestJob("next");Require(S(D(next["customer"]),"state")=="preparing","TEST");
      }finally{authenticate=oldAuth;importSession=oldImport;persistedAccount=oldRead;receiverIdentity=oldReceiver;receiverExited=oldExited;ledger=oldLedger;ledgerPath=oldPath;Directory.Delete(dir,true);}
  }
+ static void BrowserLoginAndLaunchSelfTests(){
+  var dir=Path.Combine(Path.GetTempPath(),"bewqueue-browser-launch-"+NewId());Directory.CreateDirectory(dir);
+  var oldPath=ledgerPath;var oldLedger=ledger;var oldAuth=authenticate;var oldImport=importSession;var oldRead=persistedAccount;var oldReceiver=receiverIdentity;var oldExited=receiverExited;var oldAccounts=readSavedAccounts;var oldLaunch=customerLaunchServices;var oldBaselineKey=browserBaselineKey;var oldBaselineFp=browserBaselineFingerprint;var oldActiveKey=activeCustomerLaunchKey;
+  try{
+   ledgerPath=Path.Combine(dir,"ledger.json");ledger=Obj("revision",0,"current",null,"handled",new object[0],"commands",new Dictionary<string,object>());
+   var launchedUris=new List<string>();
+   string vipUrl="https://www.roblox.com/games/132929771812494?privateServerLinkCode=TESTLINKCODE99";
+   object[] ramAccounts=new object[]{
+    Obj("UserID","999","Username","Operator","SecurityToken","op-token","Fields",Obj("SavedPlaceId","132929771812494","SavedJobId",vipUrl)),
+    Obj("UserID","555","Username","Customer","SecurityToken","old-customer-token")
+   };
+   readSavedAccounts=()=>ramAccounts;
+   receiverIdentity=()=>Obj("pid",20,"startTimeUtcTicks","200");
+   receiverExited=i=>false;
+   int imports=0;
+   importSession=c=>{imports++;return Obj("protocolVersion",2,"imported",true,"canClearBrowserSession",true);};
+   persistedAccount=id=>Obj("UserID",id,"SecurityToken","fresh-cookie-secret");
+   customerLaunchServices=new CustomerLaunchServices{
+    Accounts=()=>ramAccounts,
+    VerifyProtocol=()=>{},
+    ResolvePrivateAccess=(cookie,place,url)=>{Require(url.Contains("TESTLINKCODE99"),"TEST");return "11111111-2222-3333-4444-555555555555";},
+    FetchTicket=(cookie,place)=>"TICKET_SECRET_XYZ",
+    StartProtocol=uri=>launchedUris.Add(uri),
+    Now=()=>new DateTime(2026,11,20,0,0,0,DateTimeKind.Utc)
+   };
+
+   // 1. Prepare enters browser login mode without WebView or password
+   var order=Obj("shopId","bewpakorn.rdcw.xyz","orderId","o-vip","productId","p","productName","P","mapId","cameraman","mapName","Cameraman","placeId","132929771812494","operatorUserId","999","createdAt","2026-01-01T00:00:00Z","customerUsername","");
+   var job=Obj("jobId",NewId(),"generation",1,"completionToken",NewId(),"order",order,"protectedOperatorUserIds",new object[]{"999"},"state","preparing","customer",Obj("source","order","username","","state","waiting"),"operator",Obj("userId","999","state","ready"));
+   ledger["current"]=job;
+   Prepare(Obj("jobId",job["jobId"],"generation",1,"username","Customer"));
+   Require(S(D(job["customer"]),"loginMode")=="browser" && S(D(job["customer"]),"state")=="preparing","TEST");
+
+   // 2. Wrong browser account does not import or block
+   authenticate=c=>Obj("id","777","name","WrongUser");
+   var mismatch=ImportBrowserSession(Obj("jobId",job["jobId"],"generation",1,"username","Customer","cookie","wrong-cookie"));
+   Require(S(mismatch,"matched")=="False" && S(mismatch,"code")=="CUSTOMER_ID_MISMATCH" && S(mismatch,"actualUsername")=="WrongUser" && S(mismatch,"canClearBrowserCookie")=="False" && imports==0,"TEST");
+   Require(S(D(job["customer"]),"state")=="preparing","TEST");
+
+   // 3. Matching browser session imports to RAM and auto-launches VIP private server
+   authenticate=c=>Obj("id","555","name","Customer");
+   var ok=ImportBrowserSession(Obj("jobId",job["jobId"],"generation",1,"username","Customer","cookie","fresh-cookie-secret"));
+   Require(S(ok,"matched")=="True" && S(ok,"imported")=="True" && S(ok,"canClearBrowserCookie")=="True" && imports==1,"TEST");
+   Require(S(D(job["customer"]),"state")=="ready" && S(D(D(job["customer"])["game"]),"state")=="launched" && S(D(D(job["customer"])["game"]),"mode")=="private","TEST");
+   Require(launchedUris.Count==1 && launchedUris[0].Contains("RequestPrivateGame") && launchedUris[0].Contains("11111111-2222-3333-4444-555555555555") && launchedUris[0].Contains("TICKET_SECRET_XYZ"),"TEST");
+   string disk=File.ReadAllText(ledgerPath);
+   Require(!disk.Contains("fresh-cookie-secret") && !disk.Contains("TICKET_SECRET_XYZ") && !disk.Contains("TESTLINKCODE99") && !disk.Contains("11111111-2222-3333-4444-555555555555"),"TEST");
+
+   // 4. Fallback to Public Server when map has no VIP link
+   launchedUris.Clear();
+   var orderPub=Obj("shopId","bewpakorn.rdcw.xyz","orderId","o-pub","productId","p","productName","P","mapId","other","mapName","Other","placeId","999888777","operatorUserId","999","createdAt","2026-01-01T00:00:00Z","customerUsername","");
+   job=Obj("jobId",NewId(),"generation",1,"completionToken",NewId(),"order",orderPub,"protectedOperatorUserIds",new object[]{"999"},"state","preparing","customer",Obj("source","order","username","","state","waiting"),"operator",Obj("userId","999","state","ready"));
+   ledger["current"]=job;
+   Prepare(Obj("jobId",job["jobId"],"generation",1,"username","Customer"));
+   ImportBrowserSession(Obj("jobId",job["jobId"],"generation",1,"username","Customer","cookie","fresh-cookie-secret"));
+   Require(S(D(D(job["customer"])["game"]),"state")=="launched" && S(D(D(job["customer"])["game"]),"mode")=="public","TEST");
+   Require(launchedUris.Count==1 && launchedUris[0].Contains("RequestGame") && launchedUris[0].Contains("999888777"),"TEST");
+
+   // 5. VIP failure keeps customer ready and allows manual public server launch
+   launchedUris.Clear();
+   customerLaunchServices.ResolvePrivateAccess=(cookie,place,url)=>{throw new HostError("PRIVATE_TARGET_DENIED");};
+   job=Obj("jobId",NewId(),"generation",1,"completionToken",NewId(),"order",Obj("shopId","bewpakorn.rdcw.xyz","orderId","o-vipfail","productId","p","productName","P","mapId","cameraman","mapName","Cameraman","placeId","132929771812494","operatorUserId","999","createdAt","2026-01-01T00:00:00Z","customerUsername",""),"protectedOperatorUserIds",new object[]{"999"},"state","preparing","customer",Obj("source","order","username","","state","waiting"),"operator",Obj("userId","999","state","ready"));
+   ledger["current"]=job;
+   Prepare(Obj("jobId",job["jobId"],"generation",1,"username","Customer"));
+   ImportBrowserSession(Obj("jobId",job["jobId"],"generation",1,"username","Customer","cookie","fresh-cookie-secret"));
+   Require(S(D(job["customer"]),"state")=="ready" && S(D(D(job["customer"])["game"]),"state")=="failed" && S(D(D(job["customer"])["game"]),"code")=="PRIVATE_TARGET_DENIED","TEST");
+   ramAccounts=new object[]{Obj("UserID","999","Username","Operator","SecurityToken","op-token","Fields",Obj("SavedPlaceId","132929771812494","SavedJobId",vipUrl)),Obj("UserID","555","Username","Customer","SecurityToken","fresh-cookie-secret")};
+   LaunchCustomerGameCommand(Obj("jobId",job["jobId"],"generation",1,"mode","public"));
+   Require(S(D(D(job["customer"])["game"]),"state")=="launched" && S(D(D(job["customer"])["game"]),"mode")=="public" && launchedUris.Count==1 && launchedUris[0].Contains("RequestGame"),"TEST");
+
+   // 6. SyncRamCustomer detects freshly imported RAM token (ChromeCookieImportExtension coexistence)
+   launchedUris.Clear();
+   customerLaunchServices.ResolvePrivateAccess=(cookie,place,url)=>"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+   ramAccounts=new object[]{Obj("UserID","999","Username","Operator","SecurityToken","op-token","Fields",Obj("SavedPlaceId","132929771812494","SavedJobId",vipUrl)),Obj("UserID","555","Username","Customer","SecurityToken","stale-token")};
+   job=Obj("jobId",NewId(),"generation",1,"completionToken",NewId(),"order",Obj("shopId","bewpakorn.rdcw.xyz","orderId","o-sync","productId","p","productName","P","mapId","cameraman","mapName","Cameraman","placeId","132929771812494","operatorUserId","999","createdAt","2026-01-01T00:00:00Z","customerUsername",""),"protectedOperatorUserIds",new object[]{"999"},"state","preparing","customer",Obj("source","order","username","","state","waiting"),"operator",Obj("userId","999","state","ready"));
+   ledger["current"]=job;
+   Prepare(Obj("jobId",job["jobId"],"generation",1,"username","Customer"));
+   var notYet=SyncRamCustomer(Obj("jobId",job["jobId"],"generation",1,"username","Customer"));
+   Require(S(notYet,"synced")=="False","TEST");
+   ramAccounts=new object[]{Obj("UserID","999","Username","Operator","SecurityToken","op-token","Fields",Obj("SavedPlaceId","132929771812494","SavedJobId",vipUrl)),Obj("UserID","555","Username","Customer","SecurityToken","brand-new-token")};
+   var synced=SyncRamCustomer(Obj("jobId",job["jobId"],"generation",1,"username","Customer"));
+   Require(S(synced,"synced")=="True" && S(D(job["customer"]),"state")=="ready" && S(D(D(job["customer"])["game"]),"state")=="launched" && S(D(D(job["customer"])["game"]),"mode")=="private" && launchedUris.Count==1,"TEST");
+  }finally{
+   authenticate=oldAuth;importSession=oldImport;persistedAccount=oldRead;receiverIdentity=oldReceiver;receiverExited=oldExited;readSavedAccounts=oldAccounts;customerLaunchServices=oldLaunch;browserBaselineKey=oldBaselineKey;browserBaselineFingerprint=oldBaselineFp;activeCustomerLaunchKey=oldActiveKey;ledger=oldLedger;ledgerPath=oldPath;
+   Directory.Delete(dir,true);
+  }
+ }
 }
