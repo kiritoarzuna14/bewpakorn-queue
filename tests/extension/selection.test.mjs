@@ -23,7 +23,7 @@ async function harness({legacy=false,status="PROCESSING",empty=false,metadataGat
    revision++;
   }}
   if(m.type==='PREPARE_CUSTOMER'){assert.equal(m.payload.username,'original');current.customer={source:'order',state:'ready',username:'original',userId:'22'};revision++;}
-  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true,manualChallengePause:true};
+  if(m.type==='GET_CAPABILITIES')payload={loginOnly:true,accountSelection:true,undoLast:true,ramImportSupported:true};
   else if(m.type==='GET_ACCOUNT_METADATA')payload={accounts:[{userId:'11',username:'operator',cookie:'NEVER_EXPOSE'},{userId:'22',username:'customer',password:'NEVER_EXPOSE'},{userId:'33',username:'other'}]};
   else payload=snapshot();
   if(mutation && loseReply && !error){loseReply=false;port.onDisconnect.emit();return;}

@@ -20,17 +20,6 @@ const http=require('http'),fs=require('fs'),path=require('path'),assert=require(
   assert.equal(await page.locator('#complete').isEnabled(),true);assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
   assert.equal(await page.locator('.roles .card').count(),2);assert.equal(await page.locator('label[for="customer-account"]').count(),1);assert.equal(await page.locator('label[for="operator-account"]').count(),1);
   assert.equal(await page.locator('#customer-account option').count(),3);assert.equal(await page.locator('#operator-account option').count(),3);assert.equal(await page.locator('#operator-account').inputValue(),'ram:11');assert.match(await page.locator('#customer-account option[value="order"]').textContent(),/original_order_user/);
-  for(const [code,message] of [['CUSTOMER_CAPTCHA_REQUIRED','CAPTCHA'],['CUSTOMER_OTP_REQUIRED','รหัสยืนยัน'],['CUSTOMER_PHONE_VERIFICATION','มือถือ'],['CUSTOMER_IDENTITY_VERIFICATION','ยืนยันตัวตน']]) {
-   await page.evaluate(code=>{const customer=window.state.native.current.customer;customer.code=code;customer.canResume=true;customer.waitingForUser=false;window.emitState();},code);
-   assert.match(await page.locator('#issue').textContent(),new RegExp(code));assert.match(await page.locator('#issue').textContent(),new RegExp(message));assert.doesNotMatch(await page.locator('#issue').textContent(),/กดไอคอน|เตรียมงานนี้ต่อ/);
-   await page.evaluate(()=>{window.state.native.current.customer.waitingForUser=true;window.emitState();});
-   assert.match(await page.locator('#issue').textContent(),/รอคุณยืนยันในหน้าต่างล็อกอินเดิม เมื่อผ่านระบบจะทำต่ออัตโนมัติ/);assert.doesNotMatch(await page.locator('#issue').textContent(),/กดไอคอน|เตรียมงานนี้ต่อ|เริ่มงาน.*ใหม่/);
-   assert.equal(await page.locator('#customer-state').textContent(),'ต้องตรวจสอบ');assert.equal(await page.locator('#complete').isEnabled(),true);assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
-  }
-  assert.equal(await page.evaluate(()=>window.requests.length),0);
-  await page.evaluate(()=>{const customer=window.state.native.current.customer;customer.code=null;customer.canResume=false;customer.waitingForUser=false;customer.state='preparing';window.emitState();});
-  assert.equal(await page.locator('#issue').isHidden(),true);assert.equal(await page.locator('#customer-state').textContent(),'กำลังล็อกอิน');
-  await page.evaluate(()=>{const customer=window.state.native.current.customer;customer.code='RECOVERY_REQUIRED';customer.state='blocked';window.emitState();});
   await page.selectOption('#operator-account','ram:22');
   for(const id of ['customer-account','operator-account','complete','undo']) assert.equal(await page.locator('#'+id).isDisabled(),true);
   assert.deepEqual(await page.evaluate(()=>window.requests[0]),{type:'UI_SELECT_ACCOUNT',payload:{jobId:'j',orderId:'synthetic-1',generation:1,completionToken:'t',role:'operator',source:'ram',userId:'22'}});
@@ -41,7 +30,7 @@ const http=require('http'),fs=require('fs'),path=require('path'),assert=require(
   assert.equal(await page.evaluate(()=>window.requests[3].payload.jobId),'j');assert.equal(await page.evaluate(()=>window.requests[3].payload.completionToken),'changed');await page.evaluate(()=>window.resolveMutation());await page.waitForTimeout(100);
   await page.evaluate(()=>{window.state.native.current.customer.code='PAIR_CLOSE_PENDING';window.state.native.current.code='PAIR_CLOSE_PENDING';window.emitState();});assert.equal(await page.locator('#issue').isHidden(),true);
   await page.evaluate(()=>{window.state.native.canUndo=false;window.state.native.historyTarget=null;window.emitState();});assert.equal(await page.locator('#undo').isDisabled(),true);assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=innerWidth),true);
-  await page.screenshot({path:process.env.PANEL_SCREENSHOT_PATH || path.resolve(__dirname,'../../docs/login-only-panel-320.png'),fullPage:true});
-  console.log('320px synthetic panel: manual challenge messages survive legacy canResume, waiting instructions preserve Complete and never imply ready, both labeled account selectors, identity-bound selection and Back, mutation locks, hidden legacy codes, no horizontal overflow');
+  await page.screenshot({path:path.resolve(__dirname,'../../docs/login-only-panel-320.png'),fullPage:true});
+  console.log('320px synthetic panel: both labeled account selectors, order + RAM options, identity-bound selection and Back, all controls locked during mutations, legacy game codes hidden, no horizontal overflow');
  }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

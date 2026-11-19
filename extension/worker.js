@@ -41,7 +41,7 @@ function snapshot(value) {
   broadcast();
 }
 const native = new NativeClient(chrome, snapshot, () => { state.connection = 'disconnected';state.capabilities=null; state.issue = 'NATIVE_DISCONNECTED'; broadcast(); });
-async function requireCapability(){if(!state.capabilities)state.capabilities=await native.request('GET_CAPABILITIES');if(state.capabilities.manualChallengePause!==true||state.capabilities.loginOnly!==true||state.capabilities.accountSelection!==true||state.capabilities.undoLast!==true||state.capabilities.ramImportSupported!==true)throw new Error('NATIVE_UPDATE_REQUIRED');}
+async function requireCapability(){if(!state.capabilities)state.capabilities=await native.request('GET_CAPABILITIES');if(state.capabilities.loginOnly!==true||state.capabilities.accountSelection!==true||state.capabilities.undoLast!==true||state.capabilities.ramImportSupported!==true)throw new Error('NATIVE_UPDATE_REQUIRED');}
 async function config() {
   const stored = await chrome.storage.local.get('config');
   const value = stored.config || {version:1, shopOrigin:'https://bewpakorn.rdcw.xyz', catalog:await defaultCatalog()};

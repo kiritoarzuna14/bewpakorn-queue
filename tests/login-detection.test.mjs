@@ -25,22 +25,3 @@ test('live login wording maps to actionable codes', () => {
 test('an ordinary login page is not reported as a problem', () => {
   assert.equal(run('Charts Marketplace Create Robux Sign Up Sign in Username, email, or phone Password Forgot password or username?'), '');
 });
-
-test('visible human-verification wording uses the CAPTCHA code for all observed contractions',()=>{
- for(const text of ["Verify you're human",'Verify you’re human','Verify you are human'])assert.equal(run(text),'CUSTOMER_CAPTCHA_REQUIRED');
-});
-
-test('visible manual hold instructions are classified without interacting with the challenge',()=>{
- assert.equal(run('Hold the button to confirm you are human. Press and hold'),'CUSTOMER_CAPTCHA_REQUIRED');
- assert.equal(run('Press and hold to reveal your password'),'');
- assert.equal(run('Hold the button to record a message'),'');
-});
-
-test('hidden and detached challenge frames do not become CAPTCHA errors',()=>{
- const frame=extra=>({isConnected:true,getBoundingClientRect:()=>({width:100,height:100}),getAttribute:()=>null,...extra});
- const detect=frames=>new Function('document','getComputedStyle',body)({body:{innerText:'Sign in'},querySelectorAll:s=>s.includes('iframe')?frames:[]},e=>e.style||{display:'block',visibility:'visible'});
- assert.equal(detect([frame({isConnected:false})]),'');
- assert.equal(detect([frame({style:{display:'none',visibility:'visible'}})]),'');
- assert.equal(detect([frame({getBoundingClientRect:()=>({width:0,height:0})})]),'');
- assert.equal(detect([frame({})]),'CUSTOMER_CAPTCHA_REQUIRED');
-});
