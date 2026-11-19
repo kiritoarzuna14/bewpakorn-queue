@@ -115,16 +115,28 @@ internal static partial class Host {
        if(stage=="USER"||stage=="FILL_BOTH"||stage=="PASSWORD"){
         lock(Gate){if(!Current(jobId,gen))return;}
         if(progress.Fills>=3){expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");return;}
-        script=stage=="USER"?LoginFormScripts.FillUser(J.Serialize(username)):stage=="PASSWORD"?LoginFormScripts.FillPassword(J.Serialize(username),J.Serialize(secret.Value)):LoginFormScripts.Fill(J.Serialize(username),J.Serialize(secret.Value));
-        bool filled;try{filled=await core.ExecuteScriptAsync(script)=="true";}finally{script=null;}
+        string userJson=J.Serialize(username),passwordJson=J.Serialize(secret.Value);bool filled=false;
+        // Trusted keystrokes first: the same form, typed like a person, which is
+        // what keeps Roblox from answering with a human check.
+        if(stage=="USER"||stage=="FILL_BOTH")filled=await TypeField(core,false,userJson,passwordJson,username);
+        if(filled&&stage=="FILL_BOTH"){await Task.Delay(90);filled=await TypeField(core,true,userJson,passwordJson,secret.Value);}
+        else if(stage=="PASSWORD")filled=await TypeField(core,true,userJson,passwordJson,secret.Value);
+        if(!filled){
+         script=stage=="USER"?LoginFormScripts.FillUser(userJson):stage=="PASSWORD"?LoginFormScripts.FillPassword(userJson,passwordJson):LoginFormScripts.Fill(userJson,passwordJson);
+         try{filled=await core.ExecuteScriptAsync(script)=="true";}finally{script=null;}
+        }
         if(!filled)return;
         progress.RecordFill();await Task.Delay(stage=="USER"?100:40);continue;
        }
        if(stage!="READY")return;
        lock(Gate){if(!Current(jobId,gen))return;}
        if(!progress.BeginSubmission(DateTime.UtcNow)||!MarkSubmission(jobId,gen,true))return;
-       string result=null;script=LoginFormScripts.SubmitChecked(J.Serialize(username),J.Serialize(secret.Value));
-       dispatchPending=true;try{result=J.Deserialize<string>(await core.ExecuteScriptAsync(script));dispatchPending=false;}finally{script=null;if(result==null)secret.Clear();}
+       string result=null;dispatchPending=true;
+       try{
+        if(await ClickTrusted(core))result="CLICKED";
+        else{script=LoginFormScripts.SubmitChecked(J.Serialize(username),J.Serialize(secret.Value));result=J.Deserialize<string>(await core.ExecuteScriptAsync(script));}
+        dispatchPending=false;
+       }finally{script=null;if(result==null)secret.Clear();}
        if(progress.ProveNoClick(result)){MarkSubmission(jobId,gen,false);if(result=="CHALLENGE"){progress.Observe("",true,DateTime.UtcNow);WaitForManual(jobId,gen,"CUSTOMER_IDENTITY_VERIFICATION");}}
        else if(result=="CLICKED")secret.Clear();
        else{expired=true;secret.Clear();Block(jobId,gen,"LOGIN_FORM_CHANGED");}
