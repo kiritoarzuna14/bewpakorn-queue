@@ -83,7 +83,11 @@ test('a reactive page clearing a filled value cannot receive a submit click',()=
 
 test('ChallengeVisible is independent of form fields and does not label a login dialog as a challenge',()=>{
  const f=fixture();const shown=()=>new Function('document','getComputedStyle',scripts.ChallengeVisibleBody)(f.document,e=>e.style);
- assert.equal(shown(),false);f.controls.modals.push(f.node({innerText:'Continue'}));assert.equal(shown(),true);f.controls.user=[];f.controls.password=[];assert.equal(shown(),true);assert.equal(new Function('document','getComputedStyle',scripts.IssueBody)(f.document,e=>e.style),'');f.controls.modals[0].hidden=true;assert.equal(shown(),false);
+ assert.equal(shown(),false);
+ // A benign dialog over a usable form is not a human check.
+ f.controls.modals.push(f.node({innerText:'Continue'}));assert.equal(shown(),false);assert.equal(f.fill(),true,'a benign dialog still allows filling');
+ f.controls.modals.push(f.node({innerText:"Verify you're human"}));assert.equal(shown(),true,'verification captions are a human check');
+ f.controls.modals.length=0;f.controls.modals.push(f.node({innerText:'Continue'}));f.controls.user=[];f.controls.password=[];assert.equal(shown(),true,'a dialog that replaced the form is a pause signal');assert.equal(new Function('document','getComputedStyle',scripts.IssueBody)(f.document,e=>e.style),'');f.controls.modals[0].hidden=true;assert.equal(shown(),false);
  const dialog=fixture({dialog:true});const dialogShown=()=>new Function('document','getComputedStyle',scripts.ChallengeVisibleBody)(dialog.document,e=>e.style);
  assert.equal(dialogShown(),false,'a dialog hosting the password field is the login form');
  assert.match(source,/static string ChallengeVisible/);

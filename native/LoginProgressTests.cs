@@ -16,6 +16,9 @@ internal static partial class Host {
   progress.Observe("",false,start.AddSeconds(10));Require(progress.CanAutomate(start.AddSeconds(10))&&progress.CanAutomate(start.AddSeconds(129)),"TEST_BEFORE_CLICK_MANUAL_RESUME");
   Require(!progress.CanAutomate(start.AddSeconds(131)),"TEST_REOPENED_FORM_WINDOW_STAYS_BOUNDED");
   progress=new LoginProgress(start);progress.Observe("CUSTOMER_CAPTCHA_REQUIRED",true,start.AddSeconds(2));progress.Observe("",false,start.AddSeconds(95));Require(progress.CanAutomate(start.AddSeconds(96)),"TEST_LATE_VERIFICATION_MAY_FINISH_LOGIN");
+  progress=new LoginProgress(start);Require(progress.Observe("",true,start)=="CUSTOMER_IDENTITY_VERIFICATION"&&!progress.BenignDialog(start.AddSeconds(14))&&progress.BenignDialog(start.AddSeconds(15)),"TEST_BENIGN_DIALOG_GRACE");
+  progress.Resume(start.AddSeconds(15));Require(progress.CanAutomate(start.AddSeconds(16)),"TEST_BENIGN_DIALOG_RESUMES");
+  progress=new LoginProgress(start);Require(progress.Observe("CUSTOMER_CAPTCHA_REQUIRED",true,start)!=""&&!progress.BenignDialog(start.AddSeconds(60)),"TEST_REAL_CHALLENGE_NEVER_AUTO_RESUMES");
   progress=new LoginProgress(start);Require(progress.RecordFill()&&progress.RecordFill()&&progress.RecordFill()&&!progress.RecordFill(),"TEST_SAFE_FILL_BOUND");
   Require(progress.BeginSubmission(start)&&!progress.ProveNoClick("UNKNOWN")&&progress.Submitted&&!progress.BeginSubmission(start),"TEST_UNKNOWN_SUBMIT_NEVER_REPEATED");
   foreach(string status in new[]{"PENDING","CHALLENGE","EMPTY","MISSING"}){progress=new LoginProgress(start);Require(progress.BeginSubmission(start)&&progress.ProveNoClick(status)&&!progress.Submitted&&progress.BeginSubmission(start.AddSeconds(1)),"TEST_PROVEN_NO_CLICK_MAY_WAIT");}

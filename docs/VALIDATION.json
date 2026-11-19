@@ -1,43 +1,43 @@
-﻿{
-    "version":  "1.3.3",
-    "date":  "2026-11-18",
-    "timezone":  "Asia/Bangkok",
-    "sourceCodeCommit":  "bacee0ce8eacd6a6f11cdd8ff7e69516e4e1e20a",
-    "mode":  "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
-    "observedProblem":  "The sign-in window frequently stopped on Roblox\u0027s \u0027Verify you\u0027re human / Press and hold\u0027 card, and after the operator solved it the host did not finish the login.",
-    "causes":  [
-                   "Every attempt used a brand-new WebView2 profile that was deleted afterwards, so Roblox saw an unknown device on each order; the Chrome-based build that worked earlier reused a known profile.",
-                   "The 60 second form window closed while the operator was solving the verification, so the password was discarded and no fill or submit could follow.",
-                   "After the dialog half-filled the form and then waited for the next one second tick, the form sat half-complete, which is also when the verification card appeared."
-               ],
-    "changes":  [
-                    "One shared WebView2 profile (profiles\\device) is reused for sign-in so the device is recognised; .ROBLOSECURITY is revoked before the window opens and before it closes, and the profile directory is never deleted while a session could be live.",
-                    "A human verification no longer destroys the credential window: the form window reopens for 120s after verification resolves and stays bounded.",
-                    "When the password field is already usable both fields are filled in a single pass (username first), and after filling the username the host polls every 150ms so the password and the click follow immediately instead of on the next tick.",
-                    "Panel text for the verification codes tells the operator to press and hold in the login window and that the job continues automatically."
-                ],
-    "nodeTests":  {
-                      "passed":  54,
-                      "failed":  0,
-                      "newCases":  "single-pass FILL_BOTH when the password is usable, late verification may still finish the login, reopened form window stays bounded"
-                  },
-    "nativeBuild":  "passed x64 compile and full native self-tests",
-    "browserSmoke":  {
-                         "offlineLogin":  "passed in real Chrome on synthetic markup: dialog with disabled password, dialog with usable password (FILL_BOTH), zero network requests",
-                         "panel":  "message text updated for the hold-button card"
-                     },
-    "livePublicProbe":  {
-                            "account":  "none (random nonexistent username, dummy password)",
-                            "page":  "https://www.roblox.com/login",
-                            "result":  "ready=true, stage=READY via FILL_BOTH, submit=CLICKED, detected=CUSTOMER_PASSWORD_INVALID",
-                            "stored":  "no credentials written to disk; probe profile deleted"
-                        },
-    "liveCustomerLoginTested":  false,
-    "installation":  "Staged 1.3.3 in LOCALAPPDATA and in D:\\BewpakornQueue-1.0.0\\extension (the path Chrome loads); release checksums, live extension hashes and installed host hash verified.",
-    "activation":  "Reload required in chrome://extensions",
-    "preservedData":  "Ledger, history and RAM data untouched; the new shared profile starts empty, so the first sign-in may still show the verification once.",
-    "limitations":  [
-                        "The verification card cannot be triggered or solved without a real account, so the post-verification resume is covered by policy tests and the browser fixture rather than a live solve.",
-                        "Roblox decides when to challenge; the shared profile makes it rare but cannot guarantee it never appears."
-                    ]
+{
+  "version": "1.3.4",
+  "date": "2026-11-19",
+  "timezone": "Asia/Bangkok",
+  "sourceCodeCommit": "pending release commit",
+  "mode": "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
+  "observedProblem": "Orders still stopped at CUSTOMER_IDENTITY_VERIFICATION although the login form was usable; the panel asked the operator to verify a human check that was not on screen.",
+  "causes": [
+    "Any dialog that did not contain the password input was treated as a human verification, including cookie, privacy, upsell or menu dialogs, so the job paused with no challenge present.",
+    "The Resolver's own challenge() used the same rule, so even after a pause the form could not be filled.",
+    "A pause that was never completed had no way back: waitingForUser stayed set and canResume was false."
+  ],
+  "changes": [
+    "A human check now needs evidence: captcha frame/test id, or verification wording (verify you're human / press and hold / hold the button / checking your browser / unusual activity / Thai equivalents) in the page or a visible dialog. A dialog alone only counts when the login fields are gone.",
+    "The same evidence rule is used by the fill/submit guard, so a benign dialog no longer blocks filling.",
+    "An unreadable-dialog pause is re-checked after 15s and resumes automatically when the form is still usable; real verification codes never auto-resume.",
+    "The visible page text is stored in loginView while waiting, so the panel and ledger show what the window actually displays.",
+    "An unfinished verification that reaches its 10 minute limit now leaves the order blocked with its real reason but retryable (canResume) instead of a dead end."
+  ],
+  "nodeTests": {
+    "passed": 54,
+    "failed": 0,
+    "newCases": "benign dialog is not a challenge, verification captions are, dialog that replaced the form is a pause, benign dialog still allows filling, 15s grace then resume, real challenge never auto-resumes"
+  },
+  "nativeBuild": "passed x64 compile and full native self-tests",
+  "browserSmoke": {
+    "offlineLogin": "passed in real Chrome: dialog layouts, benign dialog over a usable form, captcha captions, zero network requests"
+  },
+  "livePublicProbe": {
+    "account": "none (random nonexistent username, dummy password)",
+    "page": "https://www.roblox.com/login",
+    "result": "ready=true, stage=READY (FILL_BOTH), submit=CLICKED, challengeVisible=false, detected=CUSTOMER_PASSWORD_INVALID",
+    "stored": "no credentials written to disk"
+  },
+  "liveCustomerLoginTested": false,
+  "installation": "Staged 1.3.4 in LOCALAPPDATA and D:\\BewpakornQueue-1.0.0\\extension; release checksums, live extension hashes and installed host hash verified.",
+  "activation": "Reload required in chrome://extensions",
+  "preservedData": "Ledger and history untouched. Opening the panel after the reload starts a new host that clears the stale manual wait, so the blocked order becomes retryable.",
+  "limitations": [
+    "A genuine Press-and-hold card still needs one human press; the host then continues automatically. It cannot be bypassed.",
+    "Roblox decides when to challenge, so frequency can only be reduced, not guaranteed."
+  ]
 }

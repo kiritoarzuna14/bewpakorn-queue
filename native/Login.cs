@@ -59,6 +59,9 @@ internal static partial class Host {
  static bool MarkSubmission(string jobId,string gen,bool attempted){lock(Gate){if(!Current(jobId,gen))return false;var role=D(D(ledger["current"])["customer"]);role["submissionAttempted"]=attempted;role["canResume"]=false;Bump();Save();return true;}}
  sealed class LoginSecret {internal string Value;internal LoginSecret(string value){Value=value;}internal void Clear(){Value=null;}}
  static void WaitForManual(string jobId,string gen,string code){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);if(job.ContainsKey("importIntent"))return;var role=D(job["customer"]);if(S(role,"waitingForUser")=="True"&&S(role,"code")==code)return;role["state"]="blocked";role["code"]=code;role["waitingForUser"]=true;role["canResume"]=false;UpdateJobState(job);Bump();Save();}}
+ // A human check that was never finished must not be a dead end: the order is
+ // blocked with its real reason but the operator may try it again.
+ static void ManualExpired(string jobId,string gen){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"waitingForUser")!="True")return;role["waitingForUser"]=false;role["canResume"]=RetryableLogin(S(role,"code"));UpdateJobState(job);Bump();Save();}}
  static void ClearManualWait(string jobId,string gen){lock(Gate){if(!Current(jobId,gen))return;var job=D(ledger["current"]);var role=D(job["customer"]);if(S(role,"waitingForUser")!="True"||job.ContainsKey("importIntent"))return;role["waitingForUser"]=false;if(LoginProgress.Manual(S(role,"code"))){role.Remove("code");role.Remove("loginView");role["state"]="preparing";role["canResume"]=false;}UpdateJobState(job);Bump();Save();}}
  static bool IsLoginPage(Uri uri){return uri!=null&&uri.Scheme=="https"&&uri.IsDefaultPort&&String.IsNullOrEmpty(uri.UserInfo)&&(uri.Host.Equals("www.roblox.com",StringComparison.OrdinalIgnoreCase)||uri.Host.Equals("roblox.com",StringComparison.OrdinalIgnoreCase))&&System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath,@"^/(?:[a-z]{2}(?:-[a-z]{2})?/)?login/?$",System.Text.RegularExpressions.RegexOptions.IgnoreCase);}
  static void RunLogin(string jobId,string gen,string username,LoginSecret secret){
@@ -83,7 +86,16 @@ internal static partial class Host {
       string issue=J.Deserialize<string>(await core.ExecuteScriptAsync(LoginFormScripts.Issue));
       bool dialog=J.Deserialize<bool>(await core.ExecuteScriptAsync(LoginFormScripts.ChallengeVisible));
       string manual=progress.Observe(issue,dialog,DateTime.UtcNow);
-      if(manual!=""){WaitForManual(jobId,gen,manual);if(progress.Timeout(DateTime.UtcNow)!=""){expired=true;secret.Clear();}return;}
+      if(manual!=""){
+       WaitForManual(jobId,gen,manual);
+       string view=await core.ExecuteScriptAsync(LoginFormScripts.View(J.Serialize(username)));NoteLoginView(jobId,gen,manual,view);
+       if(progress.Timeout(DateTime.UtcNow)!=""){expired=true;secret.Clear();ManualExpired(jobId,gen);return;}
+       // An unlabelled dialog does not block a form that is still usable.
+       if(!progress.BenignDialog(DateTime.UtcNow))return;
+       string peek=J.Deserialize<string>(await core.ExecuteScriptAsync(LoginFormScripts.Stage(J.Serialize(username),J.Serialize(secret.Value??""))));
+       if(peek!="USER"&&peek!="FILL_BOTH"&&peek!="PASSWORD"&&peek!="READY")return;
+       progress.Resume(DateTime.UtcNow);ClearManualWait(jobId,gen);
+      }
       ClearManualWait(jobId,gen);
       if(!String.IsNullOrEmpty(issue)){secret.Clear();expired=true;Block(jobId,gen,issue);return;}
       string timeout=progress.Timeout(DateTime.UtcNow);if(timeout!=""){expired=true;secret.Clear();Block(jobId,gen,timeout);return;}
