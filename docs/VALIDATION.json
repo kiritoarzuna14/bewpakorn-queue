@@ -1,43 +1,43 @@
-{
-  "version": "1.3.3",
-  "date": "2026-11-18",
-  "timezone": "Asia/Bangkok",
-  "sourceCodeCommit": "pending release commit",
-  "mode": "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
-  "observedProblem": "The sign-in window frequently stopped on Roblox's 'Verify you're human / Press and hold' card, and after the operator solved it the host did not finish the login.",
-  "causes": [
-    "Every attempt used a brand-new WebView2 profile that was deleted afterwards, so Roblox saw an unknown device on each order; the Chrome-based build that worked earlier reused a known profile.",
-    "The 60 second form window closed while the operator was solving the verification, so the password was discarded and no fill or submit could follow.",
-    "After the dialog half-filled the form and then waited for the next one second tick, the form sat half-complete, which is also when the verification card appeared."
-  ],
-  "changes": [
-    "One shared WebView2 profile (profiles\\device) is reused for sign-in so the device is recognised; .ROBLOSECURITY is revoked before the window opens and before it closes, and the profile directory is never deleted while a session could be live.",
-    "A human verification no longer destroys the credential window: the form window reopens for 120s after verification resolves and stays bounded.",
-    "When the password field is already usable both fields are filled in a single pass (username first), and after filling the username the host polls every 150ms so the password and the click follow immediately instead of on the next tick.",
-    "Panel text for the verification codes tells the operator to press and hold in the login window and that the job continues automatically."
-  ],
-  "nodeTests": {
-    "passed": 54,
-    "failed": 0,
-    "newCases": "single-pass FILL_BOTH when the password is usable, late verification may still finish the login, reopened form window stays bounded"
-  },
-  "nativeBuild": "passed x64 compile and full native self-tests",
-  "browserSmoke": {
-    "offlineLogin": "passed in real Chrome on synthetic markup: dialog with disabled password, dialog with usable password (FILL_BOTH), zero network requests",
-    "panel": "message text updated for the hold-button card"
-  },
-  "livePublicProbe": {
-    "account": "none (random nonexistent username, dummy password)",
-    "page": "https://www.roblox.com/login",
-    "result": "ready=true, stage=READY via FILL_BOTH, submit=CLICKED, detected=CUSTOMER_PASSWORD_INVALID",
-    "stored": "no credentials written to disk; probe profile deleted"
-  },
-  "liveCustomerLoginTested": false,
-  "installation": "Staged 1.3.3 in LOCALAPPDATA and in D:\\BewpakornQueue-1.0.0\\extension (the path Chrome loads); release checksums, live extension hashes and installed host hash verified.",
-  "activation": "Reload required in chrome://extensions",
-  "preservedData": "Ledger, history and RAM data untouched; the new shared profile starts empty, so the first sign-in may still show the verification once.",
-  "limitations": [
-    "The verification card cannot be triggered or solved without a real account, so the post-verification resume is covered by policy tests and the browser fixture rather than a live solve.",
-    "Roblox decides when to challenge; the shared profile makes it rare but cannot guarantee it never appears."
-  ]
+﻿{
+    "version":  "1.3.3",
+    "date":  "2026-11-18",
+    "timezone":  "Asia/Bangkok",
+    "sourceCodeCommit":  "bacee0ce8eacd6a6f11cdd8ff7e69516e4e1e20a",
+    "mode":  "Original Queue WebView login retained; no separate Chrome/CDP, no shop-tab architecture change",
+    "observedProblem":  "The sign-in window frequently stopped on Roblox\u0027s \u0027Verify you\u0027re human / Press and hold\u0027 card, and after the operator solved it the host did not finish the login.",
+    "causes":  [
+                   "Every attempt used a brand-new WebView2 profile that was deleted afterwards, so Roblox saw an unknown device on each order; the Chrome-based build that worked earlier reused a known profile.",
+                   "The 60 second form window closed while the operator was solving the verification, so the password was discarded and no fill or submit could follow.",
+                   "After the dialog half-filled the form and then waited for the next one second tick, the form sat half-complete, which is also when the verification card appeared."
+               ],
+    "changes":  [
+                    "One shared WebView2 profile (profiles\\device) is reused for sign-in so the device is recognised; .ROBLOSECURITY is revoked before the window opens and before it closes, and the profile directory is never deleted while a session could be live.",
+                    "A human verification no longer destroys the credential window: the form window reopens for 120s after verification resolves and stays bounded.",
+                    "When the password field is already usable both fields are filled in a single pass (username first), and after filling the username the host polls every 150ms so the password and the click follow immediately instead of on the next tick.",
+                    "Panel text for the verification codes tells the operator to press and hold in the login window and that the job continues automatically."
+                ],
+    "nodeTests":  {
+                      "passed":  54,
+                      "failed":  0,
+                      "newCases":  "single-pass FILL_BOTH when the password is usable, late verification may still finish the login, reopened form window stays bounded"
+                  },
+    "nativeBuild":  "passed x64 compile and full native self-tests",
+    "browserSmoke":  {
+                         "offlineLogin":  "passed in real Chrome on synthetic markup: dialog with disabled password, dialog with usable password (FILL_BOTH), zero network requests",
+                         "panel":  "message text updated for the hold-button card"
+                     },
+    "livePublicProbe":  {
+                            "account":  "none (random nonexistent username, dummy password)",
+                            "page":  "https://www.roblox.com/login",
+                            "result":  "ready=true, stage=READY via FILL_BOTH, submit=CLICKED, detected=CUSTOMER_PASSWORD_INVALID",
+                            "stored":  "no credentials written to disk; probe profile deleted"
+                        },
+    "liveCustomerLoginTested":  false,
+    "installation":  "Staged 1.3.3 in LOCALAPPDATA and in D:\\BewpakornQueue-1.0.0\\extension (the path Chrome loads); release checksums, live extension hashes and installed host hash verified.",
+    "activation":  "Reload required in chrome://extensions",
+    "preservedData":  "Ledger, history and RAM data untouched; the new shared profile starts empty, so the first sign-in may still show the verification once.",
+    "limitations":  [
+                        "The verification card cannot be triggered or solved without a real account, so the post-verification resume is covered by policy tests and the browser fixture rather than a live solve.",
+                        "Roblox decides when to challenge; the shared profile makes it rare but cannot guarantee it never appears."
+                    ]
 }
