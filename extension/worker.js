@@ -58,6 +58,17 @@ function isRobloxUrl(raw) {
   } catch { return false; }
 }
 
+function isRobloxLoginPath(pathname) {
+  return /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?login(?:\/|$)/i.test(pathname || '');
+}
+
+function isRobloxLoginUrl(raw) {
+  try {
+    const u = new URL(raw);
+    return u.origin === 'https://www.roblox.com' && isRobloxLoginPath(u.pathname);
+  } catch { return false; }
+}
+
 function cookieDetails(cookie) {
   const domain = cookie.domain.replace(/^\./, '');
   const details = {url: 'https://' + domain + (cookie.path || '/'), name: ROBLOX_COOKIE_NAME, storeId: cookie.storeId};
@@ -76,9 +87,7 @@ async function openRobloxLoginTab({focus = true, navigate = true} = {}) {
     const update = {};
     if (focus) update.active = true;
     if (navigate) {
-      let onLogin = false;
-      try { const u = new URL(tab.url || ''); onLogin = u.hostname === 'www.roblox.com' && u.pathname.startsWith('/login'); } catch {}
-      if (!onLogin) update.url = ROBLOX_LOGIN_URL;
+      if (!isRobloxLoginUrl(tab.url || '')) update.url = ROBLOX_LOGIN_URL;
     }
     if (Object.keys(update).length) await chrome.tabs.update(tab.id, update);
     if (focus && tab.windowId !== undefined) await chrome.windows?.update?.(tab.windowId, {focused: true}).catch?.(() => {});
@@ -101,44 +110,135 @@ async function openRobloxLoginTab({focus = true, navigate = true} = {}) {
   return robloxLoginTabId;
 }
 
-// Self-contained functions injected strictly into https://www.roblox.com/login.
+// Self-contained functions injected strictly into https://www.roblox.com/{locale?}/login.
 // Never bypasses, clicks, or interacts with any CAPTCHA/human-verification modal.
-function fillRobloxLoginInPage(username, password) {
-  if (location.origin !== 'https://www.roblox.com' || !location.pathname.toLowerCase().startsWith('/login')) return 'NOT_LOGIN_PAGE';
-  const visible = sel => Array.from(document.querySelectorAll(sel)).some(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-  if (visible('[role="dialog"],[aria-modal="true"],iframe[src*="captcha"],iframe[src*="arkoselabs"],[data-testid*="captcha"]')) return 'CHALLENGE';
-  const u = document.querySelector('#login-username');
-  const p = document.querySelector('#login-password');
-  const legacy = document.querySelector('#login-button');
-  const formButtons = p?.form ? Array.from(p.form.querySelectorAll('button[type="submit"]')) : [];
-  const named = Array.from(document.querySelectorAll('button')).filter(e => e.type === 'submit' && /^(sign in|log in|เข้าสู่ระบบ|ลงชื่อเข้าใช้)$/i.test((e.textContent || '').trim()));
-  const b = legacy || (formButtons.length === 1 ? formButtons[0] : named.length === 1 ? named[0] : null);
-  if (!u || !p || !b || u.disabled || p.disabled || u.readOnly || p.readOnly) return 'NOT_READY';
+function fillRobloxUserInPage(username) {
+  if (location.origin !== 'https://www.roblox.com' || !/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?login(?:\/|$)/i.test(location.pathname)) return 'NOT_LOGIN_PAGE';
+  const visible = e => {
+    if (!e || e.isConnected === false) return false;
+    if (typeof e.closest === 'function' && e.closest('[hidden],[aria-hidden="true"],.grecaptcha-badge,[data-testid*="badge" i]')) return false;
+    const s = typeof getComputedStyle === 'function' ? getComputedStyle(e) : null;
+    if (s && (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse' || s.opacity === '0')) return false;
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const all = sel => Array.from(document.querySelectorAll(sel)).filter(visible);
+  const pick = (sel, pred) => {
+    const byId = all(sel);
+    if (byId.length) return byId.length === 1 ? byId[0] : null;
+    const matched = Array.from(document.querySelectorAll('input')).filter(e => visible(e) && !e.closest('header,nav,#header') && pred(e));
+    return matched.length === 1 ? matched[0] : null;
+  };
+  const u = pick('#login-username', e => e.type !== 'password' && e.type !== 'hidden' && e.type !== 'checkbox' && /username|userid|email|phone|ชื่อผู้ใช้|อีเมล|โทรศัพท์/i.test(((e.getAttribute('placeholder') || '') + ' ' + (e.getAttribute('name') || '') + ' ' + (e.getAttribute('autocomplete') || '') + ' ' + (e.getAttribute('aria-label') || ''))));
+  const p = pick('#login-password', e => e.type === 'password');
+  const hasChallenge = () => {
+    if (all('iframe[src*="captcha" i],iframe[src*="arkose" i],iframe[title*="captcha" i],iframe[title*="challenge" i],[data-testid="captcha"],[data-testid="captcha-challenge"]').length) return true;
+    const t = (document.body ? (document.body.innerText || '') : '').toLowerCase();
+    if (/verify you(?: are|['’]re) human|security challenge|ยืนยันว่าคุณเป็นมนุษย์/.test(t)) return true;
+    if (/hold the button/.test(t) && /press and hold/.test(t)) return true;
+    return all('[role="dialog"],[aria-modal="true"]').some(d => !(u && d.contains(u)) && !(p && d.contains(p)));
+  };
+  if (hasChallenge()) return 'CHALLENGE';
+  if (!u || u.disabled || u.readOnly) return 'NOT_READY';
+  if (u.value === username) return 'FILLED';
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   if (!setter) return 'NOT_READY';
-  const setReactInput = (el, val) => {
-    el.focus();
-    const prev = el.value;
-    setter.call(el, val);
-    if (el._valueTracker) el._valueTracker.setValue(prev);
-    el.dispatchEvent(new Event('input', {bubbles: true}));
-    el.dispatchEvent(new Event('change', {bubbles: true}));
+  u.focus();
+  const prev = u.value;
+  setter.call(u, username);
+  if (u._valueTracker) u._valueTracker.setValue(prev);
+  try { u.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: username})); }
+  catch { u.dispatchEvent(new Event('input', {bubbles: true})); }
+  u.dispatchEvent(new Event('change', {bubbles: true}));
+  return u.value === username ? 'FILLED' : 'FILL_MISMATCH';
+}
+
+function fillRobloxPasswordInPage(expectedUsername, password) {
+  if (location.origin !== 'https://www.roblox.com' || !/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?login(?:\/|$)/i.test(location.pathname)) return 'NOT_LOGIN_PAGE';
+  const visible = e => {
+    if (!e || e.isConnected === false) return false;
+    if (typeof e.closest === 'function' && e.closest('[hidden],[aria-hidden="true"],.grecaptcha-badge,[data-testid*="badge" i]')) return false;
+    const s = typeof getComputedStyle === 'function' ? getComputedStyle(e) : null;
+    if (s && (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse' || s.opacity === '0')) return false;
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
   };
-  setReactInput(u, username);
-  setReactInput(p, password);
-  return (u.value === username && p.value === password) ? 'FILLED' : 'FILL_MISMATCH';
+  const all = sel => Array.from(document.querySelectorAll(sel)).filter(visible);
+  const pick = (sel, pred) => {
+    const byId = all(sel);
+    if (byId.length) return byId.length === 1 ? byId[0] : null;
+    const matched = Array.from(document.querySelectorAll('input')).filter(e => visible(e) && !e.closest('header,nav,#header') && pred(e));
+    return matched.length === 1 ? matched[0] : null;
+  };
+  const u = pick('#login-username', e => e.type !== 'password' && e.type !== 'hidden' && e.type !== 'checkbox' && /username|userid|email|phone|ชื่อผู้ใช้|อีเมล|โทรศัพท์/i.test(((e.getAttribute('placeholder') || '') + ' ' + (e.getAttribute('name') || '') + ' ' + (e.getAttribute('autocomplete') || '') + ' ' + (e.getAttribute('aria-label') || ''))));
+  const p = pick('#login-password', e => e.type === 'password');
+  const hasChallenge = () => {
+    if (all('iframe[src*="captcha" i],iframe[src*="arkose" i],iframe[title*="captcha" i],iframe[title*="challenge" i],[data-testid="captcha"],[data-testid="captcha-challenge"]').length) return true;
+    const t = (document.body ? (document.body.innerText || '') : '').toLowerCase();
+    if (/verify you(?: are|['’]re) human|security challenge|ยืนยันว่าคุณเป็นมนุษย์/.test(t)) return true;
+    if (/hold the button/.test(t) && /press and hold/.test(t)) return true;
+    return all('[role="dialog"],[aria-modal="true"]').some(d => !(u && d.contains(u)) && !(p && d.contains(p)));
+  };
+  if (hasChallenge()) return 'CHALLENGE';
+  if (!u || u.value !== expectedUsername) return 'USER_MISMATCH';
+  if (!p || p.disabled || p.readOnly) return 'NOT_READY';
+  if (p.value === password) return 'FILLED';
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (!setter) return 'NOT_READY';
+  p.focus();
+  const prev = p.value;
+  setter.call(p, password);
+  if (p._valueTracker) p._valueTracker.setValue(prev);
+  try { p.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: password})); }
+  catch { p.dispatchEvent(new Event('input', {bubbles: true})); }
+  p.dispatchEvent(new Event('change', {bubbles: true}));
+  return p.value === password ? 'FILLED' : 'FILL_MISMATCH';
 }
 
 function submitRobloxLoginInPage(expectedUsername, expectedPassword) {
-  if (location.origin !== 'https://www.roblox.com' || !location.pathname.toLowerCase().startsWith('/login')) return 'NOT_LOGIN_PAGE';
-  const visible = sel => Array.from(document.querySelectorAll(sel)).some(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-  if (visible('[role="dialog"],[aria-modal="true"],iframe[src*="captcha"],iframe[src*="arkoselabs"],[data-testid*="captcha"]')) return 'CHALLENGE';
-  const u = document.querySelector('#login-username');
-  const p = document.querySelector('#login-password');
-  const legacy = document.querySelector('#login-button');
-  const formButtons = p?.form ? Array.from(p.form.querySelectorAll('button[type="submit"]')) : [];
-  const named = Array.from(document.querySelectorAll('button')).filter(e => e.type === 'submit' && /^(sign in|log in|เข้าสู่ระบบ|ลงชื่อเข้าใช้)$/i.test((e.textContent || '').trim()));
-  const b = legacy || (formButtons.length === 1 ? formButtons[0] : named.length === 1 ? named[0] : null);
+  if (location.origin !== 'https://www.roblox.com' || !/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?login(?:\/|$)/i.test(location.pathname)) return 'NOT_LOGIN_PAGE';
+  const visible = e => {
+    if (!e || e.isConnected === false) return false;
+    if (typeof e.closest === 'function' && e.closest('[hidden],[aria-hidden="true"],.grecaptcha-badge,[data-testid*="badge" i]')) return false;
+    const s = typeof getComputedStyle === 'function' ? getComputedStyle(e) : null;
+    if (s && (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse' || s.opacity === '0')) return false;
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const all = sel => Array.from(document.querySelectorAll(sel)).filter(visible);
+  const labelOf = e => ((e && (e.innerText || e.textContent)) || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const loginLabels = new Set(['sign in', 'log in', 'login', 'เข้าสู่ระบบ', 'ลงชื่อเข้าใช้']);
+  const pick = (sel, pred) => {
+    const byId = all(sel);
+    if (byId.length) return byId.length === 1 ? byId[0] : null;
+    const matched = Array.from(document.querySelectorAll('input')).filter(e => visible(e) && !e.closest('header,nav,#header') && pred(e));
+    return matched.length === 1 ? matched[0] : null;
+  };
+  const u = pick('#login-username', e => e.type !== 'password' && e.type !== 'hidden' && e.type !== 'checkbox' && /username|userid|email|phone|ชื่อผู้ใช้|อีเมล|โทรศัพท์/i.test(((e.getAttribute('placeholder') || '') + ' ' + (e.getAttribute('name') || '') + ' ' + (e.getAttribute('autocomplete') || '') + ' ' + (e.getAttribute('aria-label') || ''))));
+  const p = pick('#login-password', e => e.type === 'password');
+  const hasChallenge = () => {
+    if (all('iframe[src*="captcha" i],iframe[src*="arkose" i],iframe[title*="captcha" i],iframe[title*="challenge" i],[data-testid="captcha"],[data-testid="captcha-challenge"]').length) return true;
+    const t = (document.body ? (document.body.innerText || '') : '').toLowerCase();
+    if (/verify you(?: are|['’]re) human|security challenge|ยืนยันว่าคุณเป็นมนุษย์/.test(t)) return true;
+    if (/hold the button/.test(t) && /press and hold/.test(t)) return true;
+    return all('[role="dialog"],[aria-modal="true"]').some(d => !(u && d.contains(u)) && !(p && d.contains(p)));
+  };
+  if (hasChallenge()) return 'CHALLENGE';
+  let b = null;
+  const legacy = all('#login-button').filter(e => !e.closest('header,nav,#header'));
+  if (legacy.length === 1) {
+    b = legacy[0];
+  } else if (p) {
+    let node = p.parentElement;
+    while (node && node !== document.body && node !== document.documentElement) {
+      const btns = Array.from(node.querySelectorAll('button')).filter(e => visible(e) && !e.closest('header,nav,#header'));
+      const labelled = btns.filter(e => loginLabels.has(labelOf(e)));
+      if (labelled.length === 1) { b = labelled[0]; break; }
+      const submits = btns.filter(e => e.type === 'submit');
+      if (submits.length === 1) { b = submits[0]; break; }
+      node = node.parentElement;
+    }
+  }
   if (!u || !p || !b) return 'NOT_READY';
   if (u.value !== expectedUsername || p.value !== expectedPassword) return 'FILL_MISMATCH';
   if (b.disabled || b.getAttribute('aria-disabled') === 'true') return 'PENDING';
@@ -155,11 +255,8 @@ async function waitForRobloxLoginTab(tabId, job, timeoutMs = 20000) {
     let tab;
     try { tab = await chrome.tabs.get(tabId); } catch { return false; }
     if (tab?.status === 'complete') {
-      try {
-        const u = new URL(tab.url || '');
-        if (u.origin === 'https://www.roblox.com' && u.pathname.toLowerCase().startsWith('/login')) return true;
-        if (!isRobloxUrl(tab.url || '')) return false;
-      } catch { return false; }
+      if (isRobloxLoginUrl(tab.url || '')) return true;
+      if (!isRobloxUrl(tab.url || '')) return false;
     }
     await sleep(200);
   }
@@ -179,22 +276,43 @@ async function autoFillAndSubmitRobloxLogin(job, credentials) {
     if (!ready) return 'NOT_LOGIN_PAGE';
     if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing' || state.browserNotice?.code === 'CUSTOMER_ID_MISMATCH') return 'SKIPPED';
 
-    let filled = false;
-    const fillDeadline = Date.now() + 15000;
-    while (Date.now() < fillDeadline) {
+    // Stage 1: Fill username first (dialog layout may keep password disabled until username is set)
+    let userFilled = false;
+    const userDeadline = Date.now() + 15000;
+    while (Date.now() < userDeadline) {
       if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing') return 'CANCELLED';
       let outcome;
       try {
-        const res = await chrome.scripting.executeScript({target: {tabId}, func: fillRobloxLoginInPage, args: [credentials.username, credentials.password]});
+        const res = await chrome.scripting.executeScript({target: {tabId}, func: fillRobloxUserInPage, args: [credentials.username]});
         outcome = res?.[0]?.result;
       } catch { return 'SCRIPT_FAILED'; }
-      if (outcome === 'FILLED') { filled = true; break; }
+      if (outcome === 'FILLED') { userFilled = true; break; }
       if (outcome === 'CHALLENGE' || outcome === 'NOT_LOGIN_PAGE') return outcome;
       await sleep(250);
     }
-    if (!filled) return 'FORM_TIMEOUT';
+    if (!userFilled) return 'FORM_TIMEOUT';
 
-    const submitDeadline = Date.now() + 5000;
+    // Stage 2: Fill password after username is committed
+    let passFilled = false;
+    const passDeadline = Date.now() + 10000;
+    while (Date.now() < passDeadline) {
+      if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing') return 'CANCELLED';
+      let outcome;
+      try {
+        const res = await chrome.scripting.executeScript({target: {tabId}, func: fillRobloxPasswordInPage, args: [credentials.username, credentials.password]});
+        outcome = res?.[0]?.result;
+      } catch { return 'SCRIPT_FAILED'; }
+      if (outcome === 'FILLED') { passFilled = true; break; }
+      if (outcome === 'USER_MISMATCH') {
+        await chrome.scripting.executeScript({target: {tabId}, func: fillRobloxUserInPage, args: [credentials.username]}).catch(() => {});
+      }
+      if (outcome === 'CHALLENGE' || outcome === 'NOT_LOGIN_PAGE') return outcome;
+      await sleep(250);
+    }
+    if (!passFilled) return 'FORM_TIMEOUT';
+
+    // Stage 3: Click submit ONCE once button is enabled and no challenge is open
+    const submitDeadline = Date.now() + 6000;
     while (Date.now() < submitDeadline) {
       if (!ownsJob(job) || state.native?.current?.customer?.state !== 'preparing') return 'CANCELLED';
       autoSubmittedKey = key;
@@ -583,8 +701,16 @@ async function start() {
       snapshot(resumed);
       if (state.native?.current) await prepareCurrent(state.native.current);
     } else if (job.customer?.source === 'order' && job.customer?.state === 'preparing' && job.customer?.loginMode === 'browser') {
-      await openRobloxLoginTab({focus: true, navigate: false}).catch(() => {});
-      await tryCaptureBrowserSession().catch(() => {});
+      const captured = await tryCaptureBrowserSession().catch(() => false);
+      if (!captured && ownsJob(job) && state.native?.current?.customer?.state === 'preparing' && state.browserNotice?.code !== 'CUSTOMER_ID_MISMATCH') {
+        autoSubmittedKey = '';
+        try {
+          const creds = await copyCredentials({jobId: job.jobId, generation: job.generation});
+          await autoFillAndSubmitRobloxLogin(job, creds);
+        } catch {
+          await openRobloxLoginTab({focus: true, navigate: true}).catch(() => {});
+        }
+      }
       ensureRamSyncPolling();
     }
   } finally { starting = false; }

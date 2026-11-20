@@ -76,7 +76,7 @@ internal static partial class Host {
   if(job.ContainsKey("importIntent")){Require(SettleIntent(job),"RAM_IMPORT_UNCERTAIN");job.Remove("importIntent");}CloseLogin();var list=A(ledger["handled"]).ToList();var order=D(job["order"]);list.Add(Obj("shopId",S(order,"shopId"),"orderId",S(order,"orderId"),"completedAt",Now(),"workflowCategory","ลูกค้าจากออเดอร์","operatorUserId",S(order,"operatorUserId"),"order",order,"protectedOperatorUserIds",A(job["protectedOperatorUserIds"])));ledger["handled"]=list.ToArray();commands[command]=Obj("type","COMPLETE_CURRENT","jobId",S(p,"jobId"),"orderId",S(p,"orderId"),"generation",S(p,"generation"),"completionToken",S(p,"completionToken"));  ledger["current"]=null;Bump();Save();return Snapshot();
  }
  static object Dispatch(string type,Dictionary<string,object> p){switch(type){
-  case "GET_CAPABILITIES":return Obj("protocolVersion",1,"version","1.5.1","webViewAvailable",WebViewAvailable(),"browserLogin",true,"customerGameLaunch",true,"ramImportSupported",true,"customerGrouping",false,"groupPolicy","default-preserve-existing","undoLast",true,"loginOnly",true,"accountSelection",true,"dualClientLaunch",false);
+  case "GET_CAPABILITIES":return Obj("protocolVersion",1,"version","1.5.2","webViewAvailable",WebViewAvailable(),"browserLogin",true,"customerGameLaunch",true,"ramImportSupported",true,"customerGrouping",false,"groupPolicy","default-preserve-existing","undoLast",true,"loginOnly",true,"accountSelection",true,"dualClientLaunch",false);
   case "GET_ACCOUNT_METADATA":return Obj("accounts",Metadata());
   case "GET_SNAPSHOT":return Snapshot();
   case "CLAIM_ORDER":return Claim(p);

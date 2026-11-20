@@ -113,16 +113,17 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
       action: {setBadgeText: async () => {}, onClicked: event()},
       sidePanel: {open: async () => {}},
       tabs: {
-        create: async opts => { const t = {id: nextTabId++, windowId: 1, active: Boolean(opts.active), url: opts.url, status: 'complete'}; tabs.set(t.id, t); return t; },
+        create: async opts => { const url = opts.url === 'https://www.roblox.com/login' ? 'https://www.roblox.com/th/login' : opts.url; const t = {id: nextTabId++, windowId: 1, active: Boolean(opts.active), url, status: 'complete'}; tabs.set(t.id, t); return t; },
         get: async id => { if (!tabs.has(id)) throw Error('missing'); return tabs.get(id); },
         query: async () => [...tabs.values()],
-        update: async (id, patch) => { const t = tabs.get(id); Object.assign(t, patch, {status: 'complete'}); return t; }
+        update: async (id, patch) => { const t = tabs.get(id); const fixed = {...patch}; if (fixed.url === 'https://www.roblox.com/login') fixed.url = 'https://www.roblox.com/th/login'; Object.assign(t, fixed, {status: 'complete'}); return t; }
       },
       windows: {update: async () => {}},
       scripting: {
         executeScript: async ({target, func, args}) => {
           scriptCalls.push({tabId: target.tabId, name: func.name, args: [...(args || [])]});
-          if (func.name === 'fillRobloxLoginInPage') return [{result: 'FILLED'}];
+          if (func.name === 'fillRobloxUserInPage') return [{result: 'FILLED'}];
+          if (func.name === 'fillRobloxPasswordInPage') return [{result: 'FILLED'}];
           if (func.name === 'submitRobloxLoginInPage') return [{result: 'CLICKED'}];
           return [{result: null}];
         }
@@ -139,16 +140,17 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
     await new Promise(r => setTimeout(r, 20));
     const send = (type, payload) => new Promise(resolve => messages.emit({type, payload}, {id: 'test', url: 'chrome-extension://test/panel.html'}, resolve));
 
-    // 1. Start order -> enters browser login mode, opens https://www.roblox.com/login, and auto-fills + clicks Sign In once
+    // 1. Start order -> enters browser login mode, opens localized /th/login, and auto-fills (user -> pass -> submit) once
     const started = await send('UI_START');
     assert.equal(started.ok, true);
     assert.equal(started.payload.native.current.customer.loginMode, 'browser');
     assert.equal(tabs.size, 1);
     const loginTab = [...tabs.values()][0];
-    assert.equal(loginTab.url, 'https://www.roblox.com/login');
+    assert.equal(loginTab.url, 'https://www.roblox.com/th/login');
     assert.equal(loginTab.active, true);
-    assert.deepEqual(scriptCalls.map(s => s.name), ['fillRobloxLoginInPage', 'submitRobloxLoginInPage']);
-    assert.deepEqual(scriptCalls[0].args, ['cust_demo', 'TOP_SECRET_PW']);
+    assert.deepEqual(scriptCalls.map(s => s.name), ['fillRobloxUserInPage', 'fillRobloxPasswordInPage', 'submitRobloxLoginInPage']);
+    assert.deepEqual(scriptCalls[0].args, ['cust_demo']);
+    assert.deepEqual(scriptCalls[1].args, ['cust_demo', 'TOP_SECRET_PW']);
     // Password must never leak into broadcasts or storage
     assert.equal(JSON.stringify(broadcasts).includes('TOP_SECRET_PW'), false);
     assert.equal(JSON.stringify(storage).includes('TOP_SECRET_PW'), false);
@@ -184,7 +186,7 @@ test('browser login flow: opens Chrome login tab, keeps password transient, dete
     assert.equal(afterGood.payload.native.current.customer.game.state, 'launched');
     assert.equal(afterGood.payload.native.current.customer.game.mode, 'private');
     assert.equal(removedCookies.length, 2);
-    assert.equal(loginTab.url, 'https://www.roblox.com/login');
+    assert.equal(loginTab.url, 'https://www.roblox.com/th/login');
 
     // 6. Manual relaunch in public mode forwards cleanly to native host
     const relaunched = await send('UI_LAUNCH_GAME', {jobId: 'job1', generation: 1, mode: 'public'});

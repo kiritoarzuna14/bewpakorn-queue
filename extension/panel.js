@@ -31,9 +31,10 @@ function selector(role, job, disabled) {
 
 function customerStatusLabel(data) {
   if (!data) return 'รอออเดอร์';
-  if (data.state === 'preparing' && data.loginMode === 'browser') return 'รอล็อกอินใน Chrome';
+  if (data.state === 'preparing' && data.loginMode === 'browser') return 'กำลังล็อกอินใน Chrome';
   if (data.state === 'ready' && data.game?.state === 'launching') return 'นำเข้า RAM แล้ว · กำลังเข้าเกม...';
   if (data.state === 'ready' && data.game?.state === 'launched') return data.game.mode === 'private' ? 'เข้าเกมแล้ว (VIP Server)' : 'เข้าเกมแล้ว (Public Server)';
+  if (data.state === 'ready' && data.game?.state === 'failed') return 'นำเข้า RAM แล้ว · เปิดเกมไม่สำเร็จ';
   return labels[data.state] || 'รอออเดอร์';
 }
 
@@ -67,47 +68,26 @@ function render(s) {
     selector(role, j, disabled);
   }
 
-  // Browser login controls
+  // Only show wrong-account warning if Chrome currently holds a different account session
   const cust = j?.customer;
-  const showBrowserTools = Boolean(j && cust?.source !== 'ram' && cust?.state === 'preparing' && cust?.loginMode === 'browser');
-  $('browser-tools').hidden = !showBrowserTools;
-  for (const id of ['auto-fill', 'open-roblox', 'copy-user', 'copy-pass', 'check-login']) {
-    $(id).disabled = disabled || !showBrowserTools;
-  }
-
-  // Wrong browser account notice
   const notice = s.browserNotice;
-  const showNotice = Boolean(showBrowserTools && notice?.code === 'CUSTOMER_ID_MISMATCH');
+  const showNotice = Boolean(j && cust?.source !== 'ram' && cust?.state === 'preparing' && notice?.code === 'CUSTOMER_ID_MISMATCH');
   $('browser-notice').hidden = !showNotice;
   if (showNotice) {
-    $('browser-notice-text').textContent = `ใน Chrome ล็อกอินเป็น "${notice.actualUsername || 'บัญชีอื่น'}" ไม่ตรงกับออเดอร์ (${notice.expectedUsername || cust?.username || ''}) — กดปุ่มด้านล่างเพื่อล้างคุกกี้ Chrome แล้วล็อกอินใหม่`;
+    $('browser-notice-text').textContent = `ใน Chrome ล็อกอินเป็น "${notice.actualUsername || 'บัญชีอื่น'}" ไม่ตรงกับออเดอร์ (${notice.expectedUsername || cust?.username || ''})`;
     $('clear-cookie').disabled = disabled;
   }
 
-  // Game launch box (shown once customer is ready in RAM)
-  const showGameBox = Boolean(j && cust?.state === 'ready');
-  const gameBox = $('game-box');
-  gameBox.hidden = !showGameBox;
-  if (showGameBox) {
-    const g = cust.game;
-    const failed = g?.state === 'failed';
-    gameBox.classList.toggle('failed', failed);
-    if (g?.state === 'launching') {
-      $('game-status').textContent = `กำลังเปิดเกม Roblox (Place ${g.placeId || j.order.placeId || ''})...`;
-    } else if (g?.state === 'launched') {
-      const serverLabel = g.mode === 'private' ? 'VIP Private Server' : 'Public Server';
-      $('game-status').textContent = `เด้งเปิดเกมแล้ว · ${serverLabel} (Place ${g.placeId || j.order.placeId || ''})`;
-    } else if (failed) {
-      $('game-status').textContent = `${problems[g.code] || 'เปิดเกมไม่สำเร็จ'} (${g.code || 'GAME_LAUNCH_UNAVAILABLE'})`;
-    } else {
-      $('game-status').textContent = `บัญชีลูกค้าพร้อมใน RAM แล้ว · Place ${j.order.placeId || '-'}`;
-    }
-    const launching = g?.state === 'launching';
-    $('launch-game').textContent = g?.state === 'launched' ? 'เปิดเกมอีกครั้ง' : 'เปิดเกมเข้าแมพเลย';
-    $('launch-game').disabled = disabled || launching;
-    const showPublicFallback = Boolean(failed && g?.mode === 'private');
+  // Only show game retry box if auto-launch failed
+  const g = cust?.game;
+  const showGameFail = Boolean(j && cust?.state === 'ready' && g?.state === 'failed');
+  $('game-box').hidden = !showGameFail;
+  if (showGameFail) {
+    $('game-status').textContent = `${problems[g.code] || 'เปิดเกมไม่สำเร็จ'} (${g.code || 'GAME_LAUNCH_UNAVAILABLE'})`;
+    $('launch-game').disabled = disabled;
+    const showPublicFallback = Boolean(g.mode === 'private');
     $('launch-public').hidden = !showPublicFallback;
-    $('launch-public').disabled = disabled || launching;
+    $('launch-public').disabled = disabled;
   }
 
   const code = [s.issue, j?.code, j?.customer?.code, j?.operator?.code].find(c => c && !legacyCode(c));
@@ -146,37 +126,6 @@ async function mutate(type, payload) {
   }
 }
 
-async function copyField(field, buttonId, defaultLabel) {
-  if (!visible) return;
-  const btn = $(buttonId);
-  btn.disabled = true;
-  try {
-    let value = field === 'username' ? (latestState?.native?.current?.customer?.username || latestState?.native?.current?.order?.customerUsername || '') : '';
-    if (!value) {
-      const res = await send('UI_COPY_CREDENTIALS', {jobId: visible.jobId, generation: visible.generation});
-      if (!res?.ok || !res.payload?.[field]) {
-        $('issue').hidden = false;
-        $('issue').textContent = problems[res?.error?.code] || 'คัดลอกข้อมูลไม่ได้';
-        return;
-      }
-      value = res.payload[field];
-    }
-    await navigator.clipboard.writeText(value);
-    btn.textContent = 'คัดลอกแล้ว ✓';
-    setTimeout(() => { btn.textContent = defaultLabel; }, 1500);
-  } catch {
-    $('issue').hidden = false;
-    $('issue').textContent = 'คัดลอกไปยังคลิปบอร์ดไม่สำเร็จ กรุณาคลิกในแผงแล้วลองใหม่';
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-$('auto-fill').addEventListener('click', () => { if (!locked) mutate('UI_AUTO_FILL_LOGIN', {}); });
-$('open-roblox').addEventListener('click', () => { send('UI_OPEN_ROBLOX_LOGIN').catch(() => {}); });
-$('copy-user').addEventListener('click', () => { copyField('username', 'copy-user', 'คัดลอกชื่อ'); });
-$('copy-pass').addEventListener('click', () => { copyField('password', 'copy-pass', 'คัดลอกรหัส'); });
-$('check-login').addEventListener('click', () => { if (!locked) mutate('UI_CHECK_BROWSER_LOGIN', {}); });
 $('clear-cookie').addEventListener('click', () => { if (!locked) mutate('UI_CLEAR_ROBLOX_COOKIE', {}); });
 $('launch-game').addEventListener('click', () => { if (!locked && visible) mutate('UI_LAUNCH_GAME', {jobId: visible.jobId, generation: visible.generation, mode: 'auto'}); });
 $('launch-public').addEventListener('click', () => { if (!locked && visible) mutate('UI_LAUNCH_GAME', {jobId: visible.jobId, generation: visible.generation, mode: 'public'}); });
