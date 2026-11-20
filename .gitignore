@@ -5,3 +5,42 @@ node_modules/
 work-*
 *.user
 docs/briefs/*.diff
+
+# Local environment and credentials (keep example configuration publishable).
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pfx
+*.p12
+*.key
+*.pem
+
+# Runtime data belongs outside the source repository.
+/data/
+/profiles/
+/AccountData*.json*
+/ledger*.json*
+/cookie*.json*
+/cookie*.txt
+/session*.json*
+/config.json
+/install.json
+
+# Local builds, archives, logs, and test output.
+obj/
+.vs/
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+/outputs/
+/artifacts/
+*.zip
+*.nupkg
+*.log
+*.suo
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
